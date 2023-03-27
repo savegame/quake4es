@@ -1,3 +1,9 @@
+#include "../../idlib/precompiled.h"
+#pragma hdrstop
+
+#include "../../renderer/tr_local.h"
+#include "../../renderer/Model_local.h"
+
 // Simple beam model. different with idRenderModelBeam, the line's start point is not view origin.
 
 static idCVar harm_r_skipHHBeam("harm_r_skipHHBeam",                                        "0", CVAR_RENDERER | CVAR_BOOL, "[Harmattan]: Skip beam model render");
