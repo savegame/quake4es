@@ -1,5 +1,5 @@
-#ifndef _KARIN_DOOM3_ANDROID_H
-#define _KARIN_DOOM3_ANDROID_H
+#ifndef _KARIN_SYS_ANDROID_H
+#define _KARIN_SYS_ANDROID_H
 
 #include <android/native_window.h>
 
@@ -9,6 +9,7 @@ typedef struct
     // AudioTrack
     void (*AudioTrack_init)(void *buffer, int size); // idAudioHardwareAndroid init AudioTrack
     int (*AudioTrack_write)(int offset, int length); // idAudioHardwareAndroid write data to AudioTrack
+    void (*AudioTrack_shutdown)(void); // idAudioHardwareAndroid shutdown AudioTrack
 
     // Input
     void (*Input_grabMouse)(int grab); // Android grab mouse
@@ -28,9 +29,9 @@ typedef struct
 typedef struct
 {
     // OpenGL
-    int openGL_format; // 0x8888 0x565 0x4444
+    int openGL_format; // 0x8888 0x565 0x4444 0x5551 0xaaa2
     int openGL_msaa; // 0 1 2 4
-    int openGL_version; // 20 30
+    int openGL_version; // 0x2000 0x3000
 
     // Other
     const char *nativeLibraryDir; // game library directory after apk installed
@@ -68,4 +69,4 @@ typedef struct
 
 } Q3E_Interface_t;
 
-#endif // _KARIN_DOOM3_ANDROID_H
+#endif // _KARIN_SYS_ANDROID_H
