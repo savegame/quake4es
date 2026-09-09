@@ -156,6 +156,11 @@ bool Aurora_HandleDisplayEvent(const SDL_Event *ev);
 // Picks up the testing cvars. Called once a frame, before the swap.
 void Aurora_DisplayFrame(void);
 
+// Input side of the port, in sys/sdl/aurora_input.cpp. Rewrites the
+// coordinates of an event in place so the engine reads them in the
+// coordinates of the framebuffer rather than those of the display.
+void Aurora_TransformInputEvent(SDL_Event *ev);
+
 // Handle to bind where the engine used to hardcode 0. Falls back to 0 while
 // the module is inactive, so the engine keeps rendering to the backbuffer.
 #define AURORA_SCREEN_FRAMEBUFFER() ( auroraFramebuffer.GetFramebuffer() )

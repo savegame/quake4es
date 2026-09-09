@@ -747,6 +747,10 @@ sysEvent_t Sys_GetEvent() {
 		// the buffer follows the orientation of the display and the size of
 		// the window; the engine still gets the event afterwards
 		Aurora_HandleDisplayEvent(&ev);
+
+		// the compositor speaks in display coordinates, the engine in those of
+		// the framebuffer
+		Aurora_TransformInputEvent(&ev);
 #endif
 
 		switch (ev.type) {
@@ -1263,3 +1267,7 @@ Sys_EndMouseInputEvents
 void Sys_EndMouseInputEvents() {
 	mouse_polls.SetNum(0, false);
 }
+
+#ifdef _AURORA_FBO
+#include "aurora_input.cpp"
+#endif
