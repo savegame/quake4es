@@ -8,8 +8,13 @@
 idAuroraFramebuffer auroraFramebuffer;
 
 idCVar r_auroraFramebuffer("r_auroraFramebuffer", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_INIT, "render the frame into an intermediate framebuffer and draw it with a quad before swap");
+idCVar r_auroraScale("r_auroraScale", "1.0", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "resolution the scene is rendered at, as a fraction of the window", 0.25f, 1.0f);
+idCVar r_auroraRotation("r_auroraRotation", "-1", CVAR_RENDERER | CVAR_INTEGER, "override the content rotation for testing: -1 follows the display, 0/1/2/3 are the wl_output_transform values", -1, 3);
 
 static const char *AURORA_FBO_NAME = "_auroraScreen";
+
+static const float AURORA_SCALE_MIN = 0.25f;
+static const float AURORA_SCALE_MAX = 1.0f;
 
 // the engine renders with the same orientation it would use for the backbuffer,
 // so the texture is sampled without flipping: v = 0 at the bottom edge
@@ -22,6 +27,8 @@ static const float auroraQuadVertices[] = {
 };
 
 static const char *auroraVertexShaderSource =
+    "uniform mat2 u_rotation;\n"
+    "\n"
     "in vec2 attr_Position;\n"
     "in vec2 attr_TexCoord;\n"
     "out vec2 var_TexCoord;\n"
@@ -29,7 +36,7 @@ static const char *auroraVertexShaderSource =
     "void main(void)\n"
     "{\n"
     "    var_TexCoord = attr_TexCoord;\n"
-    "    gl_Position = vec4(attr_Position, 0.0, 1.0);\n"
+    "    gl_Position = vec4(u_rotation * attr_Position, 0.0, 1.0);\n"
     "}\n";
 
 static const char *auroraFragmentShaderSource =
@@ -121,16 +128,54 @@ idAuroraFramebuffer::idAuroraFramebuffer()
     height(0),
     windowWidth(0),
     windowHeight(0),
+    rotation(AURORA_TRANSFORM_NORMAL),
+    scale(1.0f),
+    currentRotationMatrix(NULL),
     fb(NULL),
     colorTexture(0),
     program(0),
     vertexShader(0),
     fragmentShader(0),
     textureUniform(-1),
+    rotationUniform(-1),
     vertexAttrib(-1),
     texCoordAttrib(-1),
     vertexBuffer(0)
 {
+    memset(rotationMatrices, 0, sizeof(rotationMatrices));
+}
+
+/*
+====================
+idAuroraFramebuffer::BuildRotationMatrices
+
+One 2x2 matrix per wl_output_transform value, in column major order, built
+once. The quad is a fullscreen square in normalized device coordinates and
+the matrix is applied to its vertex positions only, so the rotation the
+viewer sees equals the transform, which is exactly what is handed to
+wl_surface.set_buffer_transform. The texture coordinates are never touched.
+====================
+*/
+void idAuroraFramebuffer::BuildRotationMatrices(void)
+{
+    // counter-clockwise by 0, 90, 180 and 270 degrees
+    static const float angles[AURORA_TRANSFORM_COUNT][2] = {
+        //  cos   sin
+        {  1.0f,  0.0f },
+        {  0.0f,  1.0f },
+        { -1.0f,  0.0f },
+        {  0.0f, -1.0f },
+    };
+
+    for (int i = 0; i < AURORA_TRANSFORM_COUNT; i++) {
+        const float c = angles[i][0];
+        const float s = angles[i][1];
+
+        rotationMatrices[i][0] = c;
+        rotationMatrices[i][1] = s;
+        rotationMatrices[i][2] = -s;
+        rotationMatrices[i][3] = c;
+    }
 }
 
 /*
@@ -189,6 +234,10 @@ idAuroraFramebuffer::CreateProgram
 */
 bool idAuroraFramebuffer::CreateProgram(void)
 {
+    if (program) {
+        return true;
+    }
+
     vertexShader = R_AuroraCompileShader(GL_VERTEX_SHADER, auroraVertexShaderSource);
 
     if (!vertexShader) {
@@ -225,12 +274,13 @@ bool idAuroraFramebuffer::CreateProgram(void)
     }
 
     textureUniform = qglGetUniformLocation(program, "u_texture");
+    rotationUniform = qglGetUniformLocation(program, "u_rotation");
     vertexAttrib = qglGetAttribLocation(program, "attr_Position");
     texCoordAttrib = qglGetAttribLocation(program, "attr_TexCoord");
 
-    if (textureUniform < 0 || vertexAttrib < 0 || texCoordAttrib < 0) {
-        common->Warning("[Aurora FBO]: program is missing u_texture(%d), attr_Position(%d) or attr_TexCoord(%d)",
-                        textureUniform, vertexAttrib, texCoordAttrib);
+    if (textureUniform < 0 || rotationUniform < 0 || vertexAttrib < 0 || texCoordAttrib < 0) {
+        common->Warning("[Aurora FBO]: program is missing u_texture(%d), u_rotation(%d), attr_Position(%d) or attr_TexCoord(%d)",
+                        textureUniform, rotationUniform, vertexAttrib, texCoordAttrib);
         return false;
     }
 
@@ -246,6 +296,10 @@ idAuroraFramebuffer::CreateGeometry
 */
 bool idAuroraFramebuffer::CreateGeometry(void)
 {
+    if (vertexBuffer) {
+        return true;
+    }
+
     qglGenBuffers(1, &vertexBuffer);
 
     if (!vertexBuffer) {
@@ -264,6 +318,139 @@ bool idAuroraFramebuffer::CreateGeometry(void)
 
 /*
 ====================
+idAuroraFramebuffer::DestroyBuffer
+
+Drops the framebuffer and its color texture, leaving the quad and the program
+alone: those do not depend on the size and survive every rebuild.
+====================
+*/
+void idAuroraFramebuffer::DestroyBuffer(void)
+{
+    if (colorTexture) {
+        qglDeleteTextures(1, &colorTexture);
+        colorTexture = 0;
+    }
+
+    if (fb) {
+        fb->Purge();
+        Framebuffer::framebuffers.Remove(fb);
+        delete fb;
+        fb = NULL;
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::PublishSize
+
+Tells the engine the screen is the size of the buffer. glConfig.vidWidth and
+vidHeight are the single source every other place reads from, and the engine
+sets its viewport from them every frame, so the scene lands in the buffer on
+its own. The screen sized helper framebuffers are rebuilt to match, because
+nothing else would tell them the size changed.
+====================
+*/
+void idAuroraFramebuffer::PublishSize(void)
+{
+    glConfig.vidWidth = width;
+    glConfig.vidHeight = height;
+
+    if (!active) {
+        // first build: Framebuffer::Init() creates the helpers right after us,
+        // already at the size just published
+        return;
+    }
+
+    if (idStencilTexture::IsAvailable()) {
+        stencilTexture.Init(width, height);
+    }
+
+    if (idDepthStencilRenderer::IsAvailable()) {
+        depthStencilRenderer.Init(width, height);
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::Build
+
+Builds the buffer for a window size, a transform and a scale. When the content
+is turned onto its side the buffer takes the sides of the window swapped, so a
+landscape game on a portrait panel renders landscape and the quad turns it.
+====================
+*/
+bool idAuroraFramebuffer::Build(int newWindowWidth, int newWindowHeight, auroraTransform_t newRotation, float newScale)
+{
+    if (newWindowWidth <= 0 || newWindowHeight <= 0) {
+        common->Warning("[Aurora FBO]: bad window size %d x %d", newWindowWidth, newWindowHeight);
+        return false;
+    }
+
+    int newWidth = newWindowWidth;
+    int newHeight = newWindowHeight;
+
+    if (TransformIsSideways(newRotation)) {
+        newWidth = newWindowHeight;
+        newHeight = newWindowWidth;
+    }
+
+    newWidth = (int)(newWidth * newScale);
+    newHeight = (int)(newHeight * newScale);
+
+    if (newWidth < 1) {
+        newWidth = 1;
+    }
+
+    if (newHeight < 1) {
+        newHeight = 1;
+    }
+
+    const bool sizeChanged = (newWidth != width || newHeight != height);
+
+    windowWidth = newWindowWidth;
+    windowHeight = newWindowHeight;
+    rotation = newRotation;
+    scale = newScale;
+    currentRotationMatrix = rotationMatrices[newRotation];
+
+    if (!sizeChanged && fb) {
+        // a turn between two sideways transforms keeps the size, and then only
+        // the matrix changes: nothing to rebuild
+        return true;
+    }
+
+    DestroyBuffer();
+
+    width = newWidth;
+    height = newHeight;
+
+    fb = Framebuffer::Alloc(AURORA_FBO_NAME, width, height);
+
+    if (!fb) {
+        common->Warning("[Aurora FBO]: Framebuffer::Alloc failed");
+        return false;
+    }
+
+    if (!CreateColorTexture()) {
+        DestroyBuffer();
+        return false;
+    }
+
+    fb->Bind();
+    // idFramebuffer only attaches color through idImage, and the texture is a
+    // plain GL object here, so it is attached the same way AttachImage2D() does
+    qglFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+    fb->AddDepthStencilBuffer(GL_DEPTH24_STENCIL8);
+    fb->Check();
+    fb->Unbind();
+
+    PublishSize();
+
+    return true;
+}
+
+/*
+====================
 idAuroraFramebuffer::Init
 
 Called from Framebuffer::Init() before anything binds the screen, so every
@@ -273,11 +460,7 @@ Called from Framebuffer::Init() before anything binds the screen, so every
 bool idAuroraFramebuffer::Init(int w, int h)
 {
     if (active) {
-        if (w == windowWidth && h == windowHeight) {
-            return true;
-        }
-
-        Shutdown();
+        return Resize(w, h);
     }
 
     if (!r_auroraFramebuffer.GetBool()) {
@@ -290,52 +473,121 @@ bool idAuroraFramebuffer::Init(int w, int h)
         return false;
     }
 
-    if (w <= 0 || h <= 0) {
-        common->Warning("[Aurora FBO]: bad window size %d x %d", w, h);
-        return false;
-    }
-
-    windowWidth = w;
-    windowHeight = h;
-
-    // no downscale and no rotation yet, the buffer matches the window
-    width = w;
-    height = h;
-
-    fb = Framebuffer::Alloc(AURORA_FBO_NAME, width, height);
-
-    if (!fb) {
-        common->Warning("[Aurora FBO]: Framebuffer::Alloc failed");
-        return false;
-    }
-
-    if (!CreateColorTexture()) {
-        Shutdown();
-        return false;
-    }
-
-    fb->Bind();
-    // idFramebuffer only attaches color through idImage, and the texture is a
-    // plain GL object here, so it is attached the same way AttachImage2D() does
-    qglFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
-    fb->AddDepthStencilBuffer(GL_DEPTH24_STENCIL8);
-    fb->Check();
-    fb->Unbind();
+    BuildRotationMatrices();
 
     if (!CreateProgram() || !CreateGeometry()) {
         Shutdown();
         return false;
     }
 
+    float initialScale = r_auroraScale.GetFloat();
+
+    if (initialScale < AURORA_SCALE_MIN) {
+        initialScale = AURORA_SCALE_MIN;
+    } else if (initialScale > AURORA_SCALE_MAX) {
+        initialScale = AURORA_SCALE_MAX;
+    }
+
+    // no rotation until the platform layer reports the display orientation
+    if (!Build(w, h, AURORA_TRANSFORM_NORMAL, initialScale)) {
+        Shutdown();
+        return false;
+    }
+
     active = true;
 
-    // from here on the engine has to believe the screen is the size of the
-    // buffer, not the size of the real window
-    glConfig.vidWidth = width;
-    glConfig.vidHeight = height;
+    common->Printf("[Aurora FBO]: %d x %d into window %d x %d, transform %d, scale %.2f, handle %d\n",
+                   width, height, windowWidth, windowHeight, rotation, scale, fb->GetFramebuffer());
 
-    common->Printf("[Aurora FBO]: %d x %d into window %d x %d, handle %d\n",
-                   width, height, windowWidth, windowHeight, fb->GetFramebuffer());
+    return true;
+}
+
+/*
+====================
+idAuroraFramebuffer::SetRotation
+====================
+*/
+bool idAuroraFramebuffer::SetRotation(auroraTransform_t transform)
+{
+    if (!active) {
+        return false;
+    }
+
+    if (transform < 0 || transform >= AURORA_TRANSFORM_COUNT) {
+        common->Warning("[Aurora FBO]: bad transform %d", transform);
+        return false;
+    }
+
+    if (transform == rotation) {
+        return true;
+    }
+
+    const int oldWidth = width;
+    const int oldHeight = height;
+
+    if (!Build(windowWidth, windowHeight, transform, scale)) {
+        return false;
+    }
+
+    common->Printf("[Aurora FBO]: transform %d, buffer %d x %d\n", rotation, width, height);
+
+    if (width != oldWidth || height != oldHeight) {
+        common->Printf("[Aurora FBO]: buffer resized %d x %d -> %d x %d\n", oldWidth, oldHeight, width, height);
+    }
+
+    return true;
+}
+
+/*
+====================
+idAuroraFramebuffer::SetScale
+====================
+*/
+bool idAuroraFramebuffer::SetScale(float newScale)
+{
+    if (!active) {
+        return false;
+    }
+
+    if (newScale < AURORA_SCALE_MIN) {
+        newScale = AURORA_SCALE_MIN;
+    } else if (newScale > AURORA_SCALE_MAX) {
+        newScale = AURORA_SCALE_MAX;
+    }
+
+    if (newScale == scale) {
+        return true;
+    }
+
+    if (!Build(windowWidth, windowHeight, rotation, newScale)) {
+        return false;
+    }
+
+    common->Printf("[Aurora FBO]: scale %.2f, buffer %d x %d\n", scale, width, height);
+
+    return true;
+}
+
+/*
+====================
+idAuroraFramebuffer::Resize
+====================
+*/
+bool idAuroraFramebuffer::Resize(int w, int h)
+{
+    if (!active) {
+        return false;
+    }
+
+    if (w == windowWidth && h == windowHeight) {
+        return true;
+    }
+
+    if (!Build(w, h, rotation, scale)) {
+        return false;
+    }
+
+    common->Printf("[Aurora FBO]: window %d x %d, buffer %d x %d\n", windowWidth, windowHeight, width, height);
 
     return true;
 }
@@ -348,6 +600,8 @@ idAuroraFramebuffer::Shutdown
 void idAuroraFramebuffer::Shutdown(void)
 {
     active = false;
+
+    DestroyBuffer();
 
     if (vertexBuffer) {
         qglDeleteBuffers(1, &vertexBuffer);
@@ -369,21 +623,16 @@ void idAuroraFramebuffer::Shutdown(void)
         fragmentShader = 0;
     }
 
-    if (colorTexture) {
-        qglDeleteTextures(1, &colorTexture);
-        colorTexture = 0;
-    }
-
-    // the framebuffer object itself is owned by Framebuffer::framebuffers and
-    // is purged together with the rest of them
-    fb = NULL;
-
     textureUniform = -1;
+    rotationUniform = -1;
     vertexAttrib = -1;
     texCoordAttrib = -1;
+    currentRotationMatrix = NULL;
 
     width = height = 0;
     windowWidth = windowHeight = 0;
+    rotation = AURORA_TRANSFORM_NORMAL;
+    scale = 1.0f;
 }
 
 /*
@@ -412,9 +661,12 @@ void idAuroraFramebuffer::InvalidateEngineGLState(void)
 ====================
 idAuroraFramebuffer::Draw
 
-Draws the color texture onto the real backbuffer. Called from RB_SwapBuffers()
-after the engine has finished the frame, including its UI and ImGui, and right
-before the buffers are swapped.
+Draws the color texture onto the real backbuffer, rotated by the current
+transform. Called from RB_SwapBuffers() after the engine has finished the
+frame, including its UI and ImGui, and right before the buffers are swapped.
+
+Nothing is computed here: the matrix was picked in SetRotation() and the quad
+was built once.
 ====================
 */
 void idAuroraFramebuffer::Draw(void)
@@ -437,6 +689,8 @@ void idAuroraFramebuffer::Draw(void)
     qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     qglUseProgram(program);
+
+    qglUniformMatrix2fv(rotationUniform, 1, GL_FALSE, currentRotationMatrix);
 
     qglActiveTexture(GL_TEXTURE0);
     qglBindTexture(GL_TEXTURE_2D, colorTexture);

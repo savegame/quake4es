@@ -703,6 +703,11 @@ void R_InitOpenGL(void)
     // Init framebuffer: shadow map, stencil texture
     Framebuffer::Init();
 
+#ifdef _AURORA_FBO
+    // the buffer exists by now, so it can be turned to match the display
+    Aurora_DisplayInit();
+#endif
+
 	// allocate the vertex array range or vertex objects
 	vertexCache.Init();
 

@@ -743,6 +743,12 @@ sysEvent_t Sys_GetEvent() {
 
 	// loop until there is an event we care about (will return then) or no more events
 	while(SDL_PollEvent(&ev)) {
+#ifdef _AURORA_FBO
+		// the buffer follows the orientation of the display and the size of
+		// the window; the engine still gets the event afterwards
+		Aurora_HandleDisplayEvent(&ev);
+#endif
+
 		switch (ev.type) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 		case SDL_WINDOWEVENT:

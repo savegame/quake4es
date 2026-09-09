@@ -719,6 +719,10 @@ GLimp_SwapBuffers
 ===================
 */
 void GLimp_SwapBuffers() {
+#ifdef _AURORA_FBO
+    Aurora_DisplayFrame();
+#endif
+
     if(r_swapInterval.IsModified())
     {
         r_swapInterval.ClearModified();
@@ -936,3 +940,7 @@ int Sys_GetVideoRam(void)
     run_once = 512;
     return run_once;
 }
+
+#ifdef _AURORA_FBO
+#include "aurora_display.cpp"
+#endif

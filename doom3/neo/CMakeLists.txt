@@ -234,6 +234,15 @@ if(AURORA)
 	add_definitions(-D_AURORA)
 	add_definitions(-DAURORA_ORG="${AURORA_ORG}")
 	add_definitions(-DAURORA_APP="${AURORA_APP}")
+
+	# wl_surface_set_buffer_transform: the compositor does not rotate the buffer,
+	# but it needs to know which way the content is turned to line up the system
+	# gestures with what the viewer sees
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(WAYLAND_CLIENT REQUIRED wayland-client)
+	include_directories(${WAYLAND_CLIENT_INCLUDE_DIRS})
+	set(sys_libs ${sys_libs} ${WAYLAND_CLIENT_LIBRARIES})
+
 	message(STATUS "Build Aurora OS port: ${AURORA_ORG}.${AURORA_APP}")
 endif()
 
