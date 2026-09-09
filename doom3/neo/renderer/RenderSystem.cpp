@@ -1302,3 +1302,4 @@ void idRenderSystemLocal::EndFrame(byte *data, int *frontEndMsec, int *backEndMs
 #endif
 
 #include "rb/Framebuffer.cpp"
+#include "rb/AuroraFramebuffer.cpp"

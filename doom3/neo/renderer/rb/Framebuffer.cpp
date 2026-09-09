@@ -97,7 +97,7 @@ void idFramebuffer::Unbind()
 	
 	if( backEnd.glState.currentFramebuffer == this )
 	{
-		qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
+		qglBindFramebuffer( GL_FRAMEBUFFER, AURORA_SCREEN_FRAMEBUFFER() );
 		backEnd.glState.currentFramebuffer = NULL;
 	}
 }
@@ -124,7 +124,7 @@ void idFramebuffer::UnbindDirectly()
 	}
 #endif
 
-	qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
+	qglBindFramebuffer( GL_FRAMEBUFFER, AURORA_SCREEN_FRAMEBUFFER() );
 	backEnd.glState.currentFramebuffer = NULL;
 }
 
@@ -472,6 +472,13 @@ void Framebuffer::Init()
 	cmdSystem->AddCommand( "listFramebuffers", R_ListFramebuffers_f, CMD_FL_RENDERER, "lists framebuffers" );
 	
 	backEnd.glState.currentFramebuffer = NULL;
+
+#ifdef _AURORA_FBO
+	// has to come first: everything below returns "to the screen", which from
+	// now on means this framebuffer. It also latches glConfig.vidWidth/Height
+	// to the buffer size, so the screen sized helpers below follow it.
+	auroraFramebuffer.Init( glConfig.vidWidth, glConfig.vidHeight );
+#endif
 	
 #ifdef _SHADOW_MAPPING
 	int width, height;
@@ -533,6 +540,10 @@ void Framebuffer::Init()
 
 void Framebuffer::Shutdown()
 {
+#ifdef _AURORA_FBO
+	auroraFramebuffer.Shutdown();
+#endif
+
     printf("Framebuffer shutdown: %d\n", framebuffers.Num());
 	for(int i = 0; i < framebuffers.Num(); i++)
 	{
@@ -570,7 +581,7 @@ void Framebuffer::Shutdown()
 void Framebuffer::BindNull()
 {
 	{
-		qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
+		qglBindFramebuffer( GL_FRAMEBUFFER, AURORA_SCREEN_FRAMEBUFFER() );
 		qglBindRenderbuffer( GL_RENDERBUFFER, 0 );
 		backEnd.glState.currentFramebuffer = NULL;
 	}
@@ -578,7 +589,7 @@ void Framebuffer::BindNull()
 
 void Framebuffer::Default()
 {
-	qglBindFramebuffer( GL_FRAMEBUFFER, 0 );
+	qglBindFramebuffer( GL_FRAMEBUFFER, AURORA_SCREEN_FRAMEBUFFER() );
 	backEnd.glState.currentFramebuffer = NULL;
 }
 
@@ -589,7 +600,7 @@ void Framebuffer::BindDraw(idFramebuffer *fb)
 
 void Framebuffer::UnbindDraw()
 {
-	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, AURORA_SCREEN_FRAMEBUFFER());
 }
 
 void Framebuffer::Append(idFramebuffer *fb)

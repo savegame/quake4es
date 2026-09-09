@@ -625,6 +625,12 @@ const void	RB_SwapBuffers(const void *data)
 
 	RB_LogComment("***************** RB_SwapBuffers *****************\n\n\n");
 
+#ifdef _AURORA_FBO
+	// the engine is done with the frame, including its UI and ImGui: put the
+	// buffer it rendered into onto the real backbuffer
+	auroraFramebuffer.Draw();
+#endif
+
 	// don't flip if drawing to front buffer
 	if (!r_frontBuffer.GetBool()) {
 		GLimp_SwapBuffers();
