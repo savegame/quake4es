@@ -8,13 +8,13 @@
 idAuroraFramebuffer auroraFramebuffer;
 
 idCVar r_auroraFramebuffer("r_auroraFramebuffer", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_INIT, "render the frame into an intermediate framebuffer and draw it with a quad before swap");
-idCVar r_auroraScale("r_auroraScale", "1.0", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "resolution the scene is rendered at, as a fraction of the window", 0.25f, 1.0f);
+idCVar r_auroraScale("r_auroraScale", "1.0", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "resolution the scene is rendered at, as a fraction of the window: below 1 renders smaller and scales up, above 1 supersamples", 0.25f, 2.0f);
 idCVar r_auroraRotation("r_auroraRotation", "-1", CVAR_RENDERER | CVAR_INTEGER, "override the content rotation for testing: -1 follows the display, 0/1/2/3 are the wl_output_transform values", -1, 3);
 
 static const char *AURORA_FBO_NAME = "_auroraScreen";
 
 static const float AURORA_SCALE_MIN = 0.25f;
-static const float AURORA_SCALE_MAX = 1.0f;
+static const float AURORA_SCALE_MAX = 2.0f;
 
 // the engine renders with the same orientation it would use for the backbuffer,
 // so the texture is sampled without flipping: v = 0 at the bottom edge

@@ -32,6 +32,9 @@ If you have questions concerning this license or the applicable additional terms
 #include "framework/Licensee.h"
 
 #include "renderer/tr_local.h"
+#ifdef _AURORA_LAUNCHER
+#include "launcher/launcher.h"
+#endif
 
 #if defined(_WIN32) && defined(ID_ALLOW_TOOLS)
 #include "sys/win32/win_local.h"
@@ -174,6 +177,23 @@ static void R_LoadOpenGLFunc(void)
 
 #include "../../renderer/qgl_proc.h"
 }
+
+#ifdef _AURORA_LAUNCHER
+/*
+===================
+GLimp_LoadOpenGLFuncForLauncher
+
+imconfig.h aliases every gl* call to the engine's qgl* pointer, ImGui
+included, and those pointers are only filled in during GLimp_Init. The
+launcher draws with ImGui long before that, so it fills them in itself right
+after making its context current.
+===================
+*/
+extern "C" void GLimp_LoadOpenGLFuncForLauncher(void)
+{
+	R_LoadOpenGLFunc();
+}
+#endif
 
 /*
 ===================
@@ -387,6 +407,14 @@ bool GLimp_Init(glimpParms_t parms) {
             if(win_y < 0)
                 win_y = SDL_WINDOWPOS_UNDEFINED_DISPLAY(displayIndex);
         }
+#ifdef _AURORA_LAUNCHER
+        /* The launcher already made a window with the attributes set above and
+           kept it alive on purpose: creating a second one would make the first
+           disappear, and the compositor kills an application for that. */
+        window = (SDL_Window *)Launcher_GetWindow();
+
+        if (!window)
+#endif
         window = SDL_CreateWindow(ENGINE_VERSION,
                                     win_x,
                                     win_y,
@@ -481,6 +509,15 @@ bool GLimp_Init(glimpParms_t parms) {
             }
         }
 
+#ifdef _AURORA_LAUNCHER
+        context = (SDL_GLContext)Launcher_GetGLContext();
+
+        if (context) {
+            SDL_GL_MakeCurrent(window, context);
+            /* from here on the window and the context belong to the engine */
+            Launcher_ReleaseOwnership();
+        } else
+#endif
         context = SDL_GL_CreateContext(window);
 
         if (SDL_GL_SetSwapInterval(r_swapInterval.GetInteger()) < 0)

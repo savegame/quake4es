@@ -40,6 +40,9 @@ If you have questions concerning this license or the applicable additional terms
 #include "../posix/posix_public.h"
 #include "../sys_local.h"
 #include "../sys_public.h"
+#ifdef _AURORA_LAUNCHER
+#include "../sdl/launcher/launcher.h"
+#endif
 
 #include <locale.h>
 
@@ -1043,11 +1046,55 @@ int main(int argc, char **argv) {
 
 	Posix_EarlyInit( );
 
+#ifdef _AURORA_LAUNCHER
+	/* Quake 4 is not freely distributable, so its resources cannot ship in the
+	   package and the user has to point at a legally installed copy. The
+	   launcher does that, in the very window the engine goes on to render
+	   into: the compositor kills an application whose window disappears even
+	   for a moment. */
+	idList<const char *> launcherArgs;
+
+	for ( int i = 1; i < argc; i++ ) {
+		launcherArgs.Append( argv[i] );
+	}
+
+	if ( Launcher_Run() == LAUNCHER_QUIT ) {
+		return 0;
+	}
+
+	/* The picks arrive as environment variables and turn into the engine's own
+	   command line here, so the engine keeps using the mechanism it already
+	   has instead of learning about the launcher. */
+	const char *resdir = getenv( "GAME_RESDIR" );
+	const char *mod = getenv( "GAME_MOD" );
+	const char *scale = getenv( "GAME_R_3D_SCALE" );
+
+	if ( resdir && resdir[0] ) {
+		launcherArgs.Append( "+set" );
+		launcherArgs.Append( "fs_basepath" );
+		launcherArgs.Append( resdir );
+	}
+
+	if ( mod && mod[0] ) {
+		launcherArgs.Append( "+set" );
+		launcherArgs.Append( "fs_game" );
+		launcherArgs.Append( mod );
+	}
+
+	if ( scale && scale[0] ) {
+		launcherArgs.Append( "+set" );
+		launcherArgs.Append( "r_auroraScale" );
+		launcherArgs.Append( scale );
+	}
+
+	common->Init( launcherArgs.Num(), launcherArgs.Ptr(), NULL );
+#else
 	if ( argc > 1 ) {
 		common->Init( argc-1, (const char **)&argv[1], NULL );
 	} else {
 		common->Init( 0, NULL, NULL );
 	}
+#endif
 
 	//karin: do not use SDL_Timer in framework/Common.cpp
 	// set the base time

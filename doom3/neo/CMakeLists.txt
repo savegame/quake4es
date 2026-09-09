@@ -127,6 +127,7 @@ option(AURORA								"Aurora OS port"														OFF)
 set(AURORA_ORG "ru.sashikknox" CACHE STRING "Aurora OS organization name, reverse domain")
 set(AURORA_APP "quake4" CACHE STRING "Aurora OS application name")
 option(AURORA_FBO							"Render into an intermediate framebuffer and draw it with a quad (Aurora OS port)"	OFF)
+option(AURORA_LAUNCHER					"In-process ImGui launcher for picking the game resources (Aurora OS port)"	OFF)
 option(OPENAL								"OpenAL(soft, OpenSL as backend) support"									ON)
 option(MULTITHREAD							"Multi-Thread support"														ON)
 option(USE_STB_IMAGE						"Using stb_image"															ON)
@@ -249,6 +250,20 @@ endif()
 if(AURORA_FBO)
 	add_definitions(-D_AURORA_FBO)
 	message(STATUS "Build intermediate framebuffer support (Aurora OS port)")
+endif()
+
+if(AURORA_LAUNCHER)
+	add_definitions(-D_AURORA_LAUNCHER)
+	set(src_aurora_launcher
+		sys/sdl/launcher/launcher.cpp
+		sys/sdl/launcher/theme.cpp
+	)
+	# the engine itself is built as C++98, the launcher is not: it is new code
+	# and has no reason to be held back by the engine's age
+	set_source_files_properties(${src_aurora_launcher} PROPERTIES COMPILE_OPTIONS "-std=c++11")
+	message(STATUS "Build in-process launcher (Aurora OS port)")
+else()
+	set(src_aurora_launcher)
 endif()
 
 if(OPENGLES3)
@@ -1878,6 +1893,7 @@ else()
 		)
 		set(src_sys_core
 			sys/sdl/glimp.cpp
+			${src_aurora_launcher}
 		)
 	else()
 		set(src_sys_base
