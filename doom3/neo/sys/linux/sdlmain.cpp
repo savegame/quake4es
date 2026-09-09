@@ -382,11 +382,19 @@ const char* Posix_GetSavePath()
 
 static void SetSavePath()
 {
+#ifdef _AURORA
+	// the application is sandboxed and may only write into the directories
+	// named after its own identifiers, so the location is not negotiable and
+	// XDG_DATA_HOME is deliberately ignored: pointing it elsewhere would send
+	// the writes outside the sandbox
+	D3_snprintfC99(save_path, sizeof(save_path), "%s/.local/share/" AURORA_ORG "/" AURORA_APP, getenv("HOME"));
+#else
 	const char* s = getenv("XDG_DATA_HOME");
 	if (s)
 		D3_snprintfC99(save_path, sizeof(save_path), "%s/idtech4amm/" GAME_NAME_ID, s);
 	else
 		D3_snprintfC99(save_path, sizeof(save_path), "%s/.local/share/idtech4amm/" GAME_NAME_ID, getenv("HOME"));
+#endif
 }
 
 const char* Posix_GetExePath()
@@ -527,11 +535,16 @@ bool Sys_GetPath(sysPath_t type, idStr &path) {
 		return false;
 
 	case PATH_CONFIG:
+#ifdef _AURORA
+		// sandboxed, see SetSavePath() above
+		idStr::snPrintf(buf, sizeof(buf), "%s/.config/" AURORA_ORG "/" AURORA_APP, getenv("HOME"));
+#else
 		s = getenv("XDG_CONFIG_HOME");
 		if (s)
 			idStr::snPrintf(buf, sizeof(buf), "%s/idtech4amm/" GAME_NAME_ID, s);
 		else
 			idStr::snPrintf(buf, sizeof(buf), "%s/.config/idtech4amm/" GAME_NAME_ID, getenv("HOME"));
+#endif
 
 		path = buf;
 		return true;
