@@ -624,8 +624,22 @@ const int PAD_TRIGGER_UP = 8192;
 enum {
 	PAD_SOURCE_LEFTTRIGGER = PAD_NUM_BUTTONS, // the buttons are the first ones
 	PAD_SOURCE_RIGHTTRIGGER,
+	PAD_SOURCE_LEFTSTICK,	// arrow keys in menus
 	PAD_NUM_SOURCES
 };
+
+// in menus the left stick is an arrow key once it is half way out, until it
+// comes back below 0.3
+const float PAD_STICK_ARROW_DOWN = 0.5f;
+const float PAD_STICK_ARROW_UP = 0.3f;
+
+// arrow keys held in menus repeat like a keyboard's, times in msec
+const int PAD_REPEAT_DELAY = 400;
+const int PAD_REPEAT_INTERVAL = 100;
+
+// the right stick moves the menu cursor across the shorter side of the
+// screen in this many seconds
+const float PAD_CURSOR_TIME = 1.0f;
 
 static idCVar joy_deadZone("joy_deadZone", "0.2", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_FLOAT,
 		"game controller stick dead zone, as a fraction of the full deflection", 0.0f, 0.9f);
@@ -633,8 +647,11 @@ static idCVar joy_deadZone("joy_deadZone", "0.2", CVAR_SYSTEM | CVAR_ARCHIVE | C
 static idList<SDL_GameController *> pad_controllers;
 static idList<sysEvent_t> pad_events;		// waiting for Sys_GetEvent()
 static int pad_keys[PAD_NUM_SOURCES];		// the key each source holds down, 0 if none
+static int pad_repeatTime[PAD_NUM_SOURCES];	// when that key goes down again, 0 if never
 static int pad_axes[SDL_CONTROLLER_AXIS_MAX];
 static bool pad_menu = true;				// the controller works a menu, not the player
+static int pad_frameTime;
+static float pad_cursorX, pad_cursorY;		// what is left of a pixel from the last frames
 
 /*
 =================
@@ -721,7 +738,20 @@ static void PadKeyEvent(int key, bool down) {
 	}
 #endif
 
-	kbd_polls.Append(kbd_poll_t(key, down));
+	if (key >= K_MOUSE1 && key <= K_MOUSE8) {
+		mouse_polls.Append(mouse_poll_t(M_ACTION1 + key - K_MOUSE1, down ? 1 : 0));
+	} else {
+		kbd_polls.Append(kbd_poll_t(key, down));
+	}
+}
+
+/*
+=================
+PadIsArrow
+=================
+*/
+static bool PadIsArrow(int key) {
+	return key == K_UPARROW || key == K_DOWNARROW || key == K_LEFTARROW || key == K_RIGHTARROW;
 }
 
 /*
@@ -729,13 +759,14 @@ static void PadKeyEvent(int key, bool down) {
 PadRelease
 
 A source lets go of the key it pressed, even when it would press another
-one by now
+one by now: a menu may have opened or closed in between
 =================
 */
 static void PadRelease(int source) {
 	if (pad_keys[source]) {
 		PadKeyEvent(pad_keys[source], false);
 		pad_keys[source] = 0;
+		pad_repeatTime[source] = 0;
 	}
 }
 
@@ -751,6 +782,7 @@ static void PadPress(int source, int key) {
 
 	PadRelease(source);
 	pad_keys[source] = key;
+	pad_repeatTime[source] = PadIsArrow(key) ? Sys_Milliseconds() + PAD_REPEAT_DELAY : 0;
 	PadKeyEvent(key, true);
 }
 
@@ -767,6 +799,39 @@ static void PadReleaseAll(void) {
 
 /*
 =================
+PadButtonKey
+=================
+*/
+static int PadButtonKey(int button) {
+	// Escape is wired into the engine, there is no command a key could be
+	// bound to for the menu, so Start is Escape everywhere
+	if (button == SDL_CONTROLLER_BUTTON_START) {
+		return K_ESCAPE;
+	}
+
+	// menus are worked with the mouse and the arrow keys
+	if (pad_menu) {
+		switch (button) {
+			case SDL_CONTROLLER_BUTTON_A:
+				return K_MOUSE1;
+			case SDL_CONTROLLER_BUTTON_B:
+				return K_ESCAPE;
+			case SDL_CONTROLLER_BUTTON_DPAD_UP:
+				return K_UPARROW;
+			case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+				return K_DOWNARROW;
+			case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+				return K_LEFTARROW;
+			case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+				return K_RIGHTARROW;
+		}
+	}
+
+	return K_JOY1 + button;
+}
+
+/*
+=================
 PadButton
 =================
 */
@@ -776,7 +841,8 @@ static void PadButton(int button, bool down) {
 	}
 
 	if (down) {
-		PadPress(button, K_JOY1 + button);
+		pad_menu = PadMenuActive();
+		PadPress(button, PadButtonKey(button));
 	} else {
 		PadRelease(button);
 	}
@@ -904,18 +970,150 @@ static void PadCloseAll(void) {
 	// the input comes up anew, with nothing held
 	pad_events.Clear();
 	memset(pad_keys, 0, sizeof(pad_keys));
+	memset(pad_repeatTime, 0, sizeof(pad_repeatTime));
 	memset(pad_axes, 0, sizeof(pad_axes));
+}
+
+/*
+=================
+PadMenuCursor
+
+The right stick moves the menu cursor the way the mouse does, by relative
+moves. They are in pixels of the screen the GUIs are drawn on, so the
+speed follows its size, and the time the frame took
+=================
+*/
+static void PadMenuCursor(int msec) {
+	float x, y;
+
+	PadStick(SDL_CONTROLLER_AXIS_RIGHTX, SDL_CONTROLLER_AXIS_RIGHTY, x, y);
+	if (x == 0.0f && y == 0.0f) {
+		pad_cursorX = pad_cursorY = 0.0f;
+		return;
+	}
+
+	float size = Min(renderSystem->GetScreenWidth(), renderSystem->GetScreenHeight());
+	if (size <= 0.0f) {
+		size = SCREEN_HEIGHT;
+	}
+
+	// slower near the centre, to hit small things
+	float length = idMath::Sqrt(x * x + y * y);
+	float pixels = size / PAD_CURSOR_TIME * msec * 0.001f * length;
+
+	pad_cursorX += x * pixels;
+	pad_cursorY += y * pixels;
+
+	int dx = (int)pad_cursorX;
+	int dy = (int)pad_cursorY;
+
+	if (!dx && !dy) {
+		return;
+	}
+
+	pad_cursorX -= dx;
+	pad_cursorY -= dy;
+
+	sysEvent_t ev = { };
+	ev.evType = SE_MOUSE;
+	ev.evValue = dx;
+	ev.evValue2 = dy;
+	pad_events.Append(ev);
+
+#ifdef _IMGUI
+	if (R_ImGui_IsRunning()) {
+		return;
+	}
+#endif
+
+	mouse_polls.Append(mouse_poll_t(M_DELTAX, dx));
+	mouse_polls.Append(mouse_poll_t(M_DELTAY, dy));
+}
+
+/*
+=================
+PadMenuArrows
+
+The left stick is an arrow key in menus, like the D-pad
+=================
+*/
+static void PadMenuArrows(void) {
+	float x, y;
+	int key = pad_keys[PAD_SOURCE_LEFTSTICK];
+
+	PadStick(SDL_CONTROLLER_AXIS_LEFTX, SDL_CONTROLLER_AXIS_LEFTY, x, y);
+
+	// the arrow held stays until the stick is well back from its side
+	if ((key == K_LEFTARROW && x > -PAD_STICK_ARROW_UP) ||
+		(key == K_RIGHTARROW && x < PAD_STICK_ARROW_UP) ||
+		(key == K_UPARROW && y > -PAD_STICK_ARROW_UP) ||
+		(key == K_DOWNARROW && y < PAD_STICK_ARROW_UP)) {
+		key = 0;
+	}
+
+	if (!key) {
+		if (idMath::Fabs(x) >= idMath::Fabs(y)) {
+			if (x >= PAD_STICK_ARROW_DOWN) {
+				key = K_RIGHTARROW;
+			} else if (x <= -PAD_STICK_ARROW_DOWN) {
+				key = K_LEFTARROW;
+			}
+		} else {
+			if (y >= PAD_STICK_ARROW_DOWN) {
+				key = K_DOWNARROW;
+			} else if (y <= -PAD_STICK_ARROW_DOWN) {
+				key = K_UPARROW;
+			}
+		}
+	}
+
+	if (key) {
+		PadPress(PAD_SOURCE_LEFTSTICK, key);
+	} else {
+		PadRelease(PAD_SOURCE_LEFTSTICK);
+	}
 }
 
 /*
 =================
 PadFrame
 
-Once a frame, from Sys_GenerateEvents()
+Once a frame, from Sys_GenerateEvents(): follows the switches between the
+menus and the game and does what the sticks and held arrows do in menus
 =================
 */
 static void PadFrame(void) {
+	int now = Sys_Milliseconds();
+	int msec = now - pad_frameTime;
+
+	pad_frameTime = now;
 	pad_menu = PadMenuActive();
+
+	if (!pad_controllers.Num()) {
+		return;
+	}
+
+	if (!pad_menu) {
+		// the left stick walks again
+		PadRelease(PAD_SOURCE_LEFTSTICK);
+		return;
+	}
+
+	// nobody takes the events, e.g. while a map loads
+	if (pad_events.Num() > 256) {
+		return;
+	}
+
+	// a long frame must not throw the cursor across the screen
+	PadMenuCursor(Min(msec, 100));
+	PadMenuArrows();
+
+	for (int i = 0; i < PAD_NUM_SOURCES; i++) {
+		if (pad_repeatTime[i] && now >= pad_repeatTime[i]) {
+			PadKeyEvent(pad_keys[i], true);
+			pad_repeatTime[i] = now + PAD_REPEAT_INTERVAL;
+		}
+	}
 }
 
 /*
