@@ -71,6 +71,11 @@ float Sys_GetJoystickAxis(int axis)
 	return 0.0f;
 }
 
+bool Sys_GamepadActive(void)
+{
+	return false;
+}
+
 unsigned char Sys_MapCharForKey(int key)
 {
 	return (unsigned char)key;

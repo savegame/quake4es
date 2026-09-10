@@ -567,6 +567,10 @@ void			Sys_EndMouseInputEvents(void);
 // the console or the ImGui settings have the controller
 float			Sys_GetJoystickAxis(int axis);
 
+// true while a game controller is connected, e.g. for on-screen controls
+// to get out of the way
+bool			Sys_GamepadActive(void);
+
 // when the console is down, or the game is about to perform a lengthy
 // operation like map loading, the system can release the mouse cursor
 // when in windowed mode

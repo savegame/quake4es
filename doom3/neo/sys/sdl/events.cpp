@@ -1146,9 +1146,22 @@ float Sys_GetJoystickAxis(int axis) {
 
 	return 0.0f;
 }
+
+/*
+=================
+Sys_GamepadActive
+=================
+*/
+bool Sys_GamepadActive(void) {
+	return pad_controllers.Num() > 0;
+}
 #else
 float Sys_GetJoystickAxis(int axis) {
 	return 0.0f;
+}
+
+bool Sys_GamepadActive(void) {
+	return false;
 }
 #endif
 

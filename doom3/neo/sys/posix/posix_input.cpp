@@ -171,3 +171,8 @@ float Sys_GetJoystickAxis(int axis)
 {
 	return 0.0f;
 }
+
+bool Sys_GamepadActive(void)
+{
+	return false;
+}
