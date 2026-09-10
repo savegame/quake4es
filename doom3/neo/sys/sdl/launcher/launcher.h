@@ -43,6 +43,12 @@ void *Launcher_GetWindow( void );
 // caveats as Launcher_GetWindow().
 void *Launcher_GetGLContext( void );
 
+// The GL flavour of the launcher's context, spelled the way the engine's
+// harm_r_openglVersion takes it (or NULL if the launcher made no context).
+// The engine renders into that very context, so its renderer has to be set
+// up for exactly this and not for the platform default.
+const char *Launcher_GetGLVersionName( void );
+
 // Called from the engine's window-creation code after the engine has taken
 // ownership of the window/context. The launcher will no longer report them
 // as its own and will not try to free them on engine shutdown.

@@ -450,6 +450,11 @@ std::string ParentOf( const std::string &dir )
 // GL attributes: mirror the set the engine will request for its own
 // window/context. Keep these in sync.
 // ----------------------------------------------------------------------
+
+/* harm_r_openglVersion value for the context SetGLAttributesForEngine asks
+   for: an OpenGL ES 3.0 one. Change both together. */
+const char *const kGLVersionName = "GLES3.0";
+
 void SetGLAttributesForEngine()
 {
 	SDL_GL_SetAttribute( SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES );
@@ -1118,6 +1123,11 @@ void *Launcher_GetWindow( void )
 void *Launcher_GetGLContext( void )
 {
 	return g_owned ? (void *)g_context : nullptr;
+}
+
+const char *Launcher_GetGLVersionName( void )
+{
+	return g_owned ? kGLVersionName : nullptr;
 }
 
 void Launcher_ReleaseOwnership( void )

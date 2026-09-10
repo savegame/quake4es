@@ -1098,6 +1098,18 @@ int main(int argc, char **argv) {
 		launcherArgs.Append( scale );
 	}
 
+	/* The engine goes on rendering into the launcher's context, so the
+	   renderer has to be set up for the GL that context really is rather than
+	   for the platform default (desktop OpenGL off Android). Appended after
+	   the user's arguments so that nothing overrides it. */
+	const char *glVersion = Launcher_GetGLVersionName();
+
+	if ( glVersion ) {
+		launcherArgs.Append( "+set" );
+		launcherArgs.Append( "harm_r_openglVersion" );
+		launcherArgs.Append( glVersion );
+	}
+
 	common->Init( launcherArgs.Num(), launcherArgs.Ptr(), NULL );
 #else
 	if ( argc > 1 ) {

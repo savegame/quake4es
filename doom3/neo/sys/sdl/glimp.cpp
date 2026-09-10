@@ -407,11 +407,21 @@ bool GLimp_Init(glimpParms_t parms) {
             if(win_y < 0)
                 win_y = SDL_WINDOWPOS_UNDEFINED_DISPLAY(displayIndex);
         }
+        bool windowAdopted = false;
 #ifdef _AURORA_LAUNCHER
         /* The launcher already made a window with the attributes set above and
            kept it alive on purpose: creating a second one would make the first
-           disappear, and the compositor kills an application for that. */
+           disappear, and the compositor kills an application for that. The
+           game runs in that window exactly as it is: r_mode and r_fullscreen
+           do not apply to it. */
         window = (SDL_Window *)Launcher_GetWindow();
+        windowAdopted = (window != NULL);
+
+        if (windowAdopted) {
+            int w, h;
+            SDL_GetWindowSize(window, &w, &h);
+            common->Printf("Using the launcher's window %dx%d\n", w, h);
+        }
 
         if (!window)
 #endif
@@ -444,7 +454,11 @@ bool GLimp_Init(glimpParms_t parms) {
            (or was) an SDL bug were SDL switched into the wrong mode
            without giving an error code. See the bug report for details:
            https://bugzilla.libsdl.org/show_bug.cgi?id=4700 */
-        if ((flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) == SDL_WINDOW_FULLSCREEN)
+        /* Not for the launcher's window: its size belongs to the compositor,
+           which has no display modes to switch between, and every failure path
+           below destroys the window, which the compositor punishes by killing
+           the application. */
+        if (!windowAdopted && (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) == SDL_WINDOW_FULLSCREEN)
         {
             SDL_DisplayMode real_mode;
             if (SDL_GetWindowDisplayMode(window, &real_mode) != 0)
