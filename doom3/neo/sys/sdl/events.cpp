@@ -599,6 +599,98 @@ static void LoadControllerMappings(void) {
 }
 #endif
 
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+/*
+===========================================================================
+
+Game controllers
+
+===========================================================================
+*/
+
+static idList<SDL_GameController *> pad_controllers;
+
+/*
+=================
+PadOpen
+
+Only what SDL knows as a game controller is taken: a phone's volume keys may
+show up as a joystick too, and even come before the real controller
+=================
+*/
+static void PadOpen(int deviceIndex) {
+	if (!SDL_IsGameController(deviceIndex)) {
+		return;
+	}
+
+	SDL_GameController *pad = SDL_GameControllerOpen(deviceIndex);
+	if (!pad) {
+		common->Warning("Couldn't open game controller %d: %s", deviceIndex, SDL_GetError());
+		return;
+	}
+
+	// SDL announces a controller again when a mapping for it gets loaded,
+	// and opening it once more only gives back the same one
+	if (pad_controllers.FindIndex(pad) >= 0) {
+		SDL_GameControllerClose(pad);
+		return;
+	}
+
+	pad_controllers.Append(pad);
+
+	const char *name = SDL_GameControllerName(pad);
+	common->Printf("Game controller connected: %s\n", name ? name : "(unnamed)");
+}
+
+/*
+=================
+PadClose
+=================
+*/
+static void PadClose(SDL_JoystickID instanceId) {
+	for (int i = 0; i < pad_controllers.Num(); i++) {
+		SDL_GameController *pad = pad_controllers[i];
+
+		if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad)) != instanceId) {
+			continue;
+		}
+
+		const char *name = SDL_GameControllerName(pad);
+		common->Printf("Game controller disconnected: %s\n", name ? name : "(unnamed)");
+
+		SDL_GameControllerClose(pad);
+		pad_controllers.RemoveIndex(i);
+		return;
+	}
+}
+
+/*
+=================
+PadOpenAll
+
+The controllers that were there before SDL came up; the ones connected later
+arrive as SDL_CONTROLLERDEVICEADDED
+=================
+*/
+static void PadOpenAll(void) {
+	for (int i = 0; i < SDL_NumJoysticks(); i++) {
+		PadOpen(i);
+	}
+}
+
+/*
+=================
+PadCloseAll
+=================
+*/
+static void PadCloseAll(void) {
+	for (int i = 0; i < pad_controllers.Num(); i++) {
+		SDL_GameControllerClose(pad_controllers[i]);
+	}
+	pad_controllers.Clear();
+}
+#endif
+
 /*
 =================
 Sys_InitInput
@@ -639,6 +731,11 @@ void Sys_InitInput() {
 #if SDL_VERSION_ATLEAST(2, 0, 2)
 	LoadControllerMappings();
 #endif
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	// after the mappings: a controller only becomes one with its mapping
+	PadOpenAll();
+#endif
 }
 
 /*
@@ -650,6 +747,8 @@ void Sys_ShutdownInput() {
 	kbd_polls.Clear();
 	mouse_polls.Clear();
 #if SDL_VERSION_ATLEAST(2, 0, 0)
+	PadCloseAll();
+
 	SDL_iconv_close( iconvDesc ); // used by utf8ToISO8859_1()
 	iconvDesc = ( SDL_iconv_t ) -1; 
 #endif
@@ -1170,6 +1269,17 @@ sysEvent_t Sys_GetEvent() {
 				common->Warning("unknown user event %u", ev.user.code);
 				continue; // handle next event
 			}
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		case SDL_CONTROLLERDEVICEADDED:
+			PadOpen(ev.cdevice.which); // a device index here
+			continue; // handle next event
+
+		case SDL_CONTROLLERDEVICEREMOVED:
+			PadClose(ev.cdevice.which); // and an instance id here
+			continue; // handle next event
+#endif
+
 		default:
 			// ok, I don't /really/ care about unknown SDL events. only uncomment this for debugging.
 			// common->Warning("unknown SDL event 0x%x", ev.type);
@@ -1188,8 +1298,16 @@ Sys_ClearEvents
 void Sys_ClearEvents() {
 	SDL_Event ev;
 
-	while (SDL_PollEvent(&ev))
-		;
+	while (SDL_PollEvent(&ev)) {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		// the input goes, but not the controllers coming and going
+		if (ev.type == SDL_CONTROLLERDEVICEADDED) {
+			PadOpen(ev.cdevice.which);
+		} else if (ev.type == SDL_CONTROLLERDEVICEREMOVED) {
+			PadClose(ev.cdevice.which);
+		}
+#endif
+	}
 
 	kbd_polls.SetNum(0, false);
 	mouse_polls.SetNum(0, false);
