@@ -549,8 +549,9 @@ bool Sys_GetPath(sysPath_t type, idStr &path) {
 
 	case PATH_CONFIG:
 #ifdef _AURORA
-		// sandboxed, see SetSavePath() above
-		idStr::snPrintf(buf, sizeof(buf), "%s/.config/" AURORA_ORG "/" AURORA_APP, getenv("HOME"));
+		// sandboxed: the application may only write to its own directory
+		// under ~/.local/share, see SetSavePath() above
+		idStr::snPrintf(buf, sizeof(buf), "%s/.local/share/" AURORA_ORG "/" AURORA_APP, getenv("HOME"));
 #else
 		s = getenv("XDG_CONFIG_HOME");
 		if (s)

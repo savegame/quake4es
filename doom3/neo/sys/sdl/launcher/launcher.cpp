@@ -233,7 +233,7 @@ void RescanMods()
 }
 
 // ----------------------------------------------------------------------
-// Persistent config: ~/.config/<org>/<app>/launcher.conf, key=value.
+// Persistent config: ~/.local/share/<org>/<app>/launcher.conf, key=value.
 //   path       — last picked resource root
 //   r_3d_scale — offscreen render scale factor (FBO)
 // ----------------------------------------------------------------------
@@ -250,10 +250,11 @@ std::string HomeDir()
 
 std::string ConfigDir()
 {
-	/* The AuroraOS sandbox only allows writes under ~/.config/<org>/<app>
-	   (and ~/.local/share, ~/.cache) — elsewhere the write is silently
-	   swallowed and the config is lost on the next launch. */
-	return HomeDir() + "/.config/" AURORA_ORG "/" AURORA_APP;
+	/* The application may only write to its own directory under
+	   ~/.local/share, the same one the engine keeps its saves and config in.
+	   Elsewhere the write is silently swallowed by the sandbox and the
+	   config is lost on the next launch. */
+	return HomeDir() + "/.local/share/" AURORA_ORG "/" AURORA_APP;
 }
 
 std::string ConfigFile() { return ConfigDir() + "/launcher.conf"; }

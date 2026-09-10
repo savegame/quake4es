@@ -165,6 +165,15 @@ void idImGui::Init(void)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
 
+#ifdef _AURORA
+    // ImGui keeps imgui.ini in the working directory by default, which is not
+    // the application's to write to. Keep it with the saves instead.
+    static idStr iniPath;
+    iniPath = cvarSystem->GetCVarString("fs_savepath");
+    iniPath.AppendPath("imgui.ini");
+    io.IniFilename = iniPath.c_str();
+#endif
+
     GLimp_ImGui_Init();
 
 #ifdef __ANDROID__ //karin: make scrollbar more large
