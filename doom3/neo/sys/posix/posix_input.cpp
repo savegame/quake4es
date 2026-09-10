@@ -165,3 +165,9 @@ void Sys_EndMouseInputEvents(void)
 	// moved out of the Sys_PollMouseInputEvents
 	poll_mouse_event_count = 0;
 }
+
+// no game controller support here
+float Sys_GetJoystickAxis(int axis)
+{
+	return 0.0f;
+}

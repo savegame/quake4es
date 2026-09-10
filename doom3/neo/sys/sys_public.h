@@ -562,6 +562,11 @@ int				Sys_PollMouseInputEvents(void);
 int				Sys_ReturnMouseInputEvent(const int n, int &action, int &value);
 void			Sys_EndMouseInputEvents(void);
 
+// game controller sticks, by joystickAxis_t: -1.0 .. 1.0 with the dead zone
+// already taken out. They only steer the player, so they read 0 while a menu,
+// the console or the ImGui settings have the controller
+float			Sys_GetJoystickAxis(int axis);
+
 // when the console is down, or the game is about to perform a lengthy
 // operation like map loading, the system can release the mouse cursor
 // when in windowed mode

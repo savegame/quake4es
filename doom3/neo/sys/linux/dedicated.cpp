@@ -66,6 +66,11 @@ int Sys_ReturnKeyboardInputEvent(const int n, int &action, bool &state)
 	return 0;
 }
 
+float Sys_GetJoystickAxis(int axis)
+{
+	return 0.0f;
+}
+
 unsigned char Sys_MapCharForKey(int key)
 {
 	return (unsigned char)key;

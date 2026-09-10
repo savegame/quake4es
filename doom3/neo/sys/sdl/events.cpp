@@ -627,9 +627,62 @@ enum {
 	PAD_NUM_SOURCES
 };
 
+static idCVar joy_deadZone("joy_deadZone", "0.2", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_FLOAT,
+		"game controller stick dead zone, as a fraction of the full deflection", 0.0f, 0.9f);
+
 static idList<SDL_GameController *> pad_controllers;
 static idList<sysEvent_t> pad_events;		// waiting for Sys_GetEvent()
 static int pad_keys[PAD_NUM_SOURCES];		// the key each source holds down, 0 if none
+static int pad_axes[SDL_CONTROLLER_AXIS_MAX];
+static bool pad_menu = true;				// the controller works a menu, not the player
+
+/*
+=================
+PadMenuActive
+
+The console, a menu or the ImGui settings take the controller for
+themselves, the same things that take the mouse; the player only gets it
+when none of them is up and a map is running
+=================
+*/
+static bool PadMenuActive(void) {
+	if (console->Active() || sessLocal.GetActiveMenu() != NULL || !sessLocal.mapSpawned) {
+		return true;
+	}
+
+#ifdef _IMGUI
+	if (R_ImGui_IsRunning()) {
+		return true;
+	}
+#endif
+
+	return false;
+}
+
+/*
+=================
+PadStick
+
+One stick as -1..1, with a round dead zone that the move starts from zero
+at the edge of
+=================
+*/
+static void PadStick(int axisX, int axisY, float &x, float &y) {
+	x = pad_axes[axisX] / 32767.0f;
+	y = pad_axes[axisY] / 32767.0f;
+
+	float length = idMath::Sqrt(x * x + y * y);
+	float deadZone = joy_deadZone.GetFloat();
+
+	if (length <= deadZone) {
+		x = y = 0.0f;
+		return;
+	}
+
+	float scale = (Min(length, 1.0f) - deadZone) / (1.0f - deadZone) / length;
+	x *= scale;
+	y *= scale;
+}
 
 /*
 =================
@@ -748,6 +801,12 @@ PadAxis
 =================
 */
 static void PadAxis(int axis, int value) {
+	if (axis < 0 || axis >= SDL_CONTROLLER_AXIS_MAX) {
+		return;
+	}
+
+	pad_axes[axis] = value;
+
 	switch (axis) {
 		case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
 			PadTrigger(PAD_SOURCE_LEFTTRIGGER, PAD_KEY_LEFTTRIGGER, value);
@@ -809,8 +868,10 @@ static void PadClose(SDL_JoystickID instanceId) {
 		SDL_GameControllerClose(pad);
 		pad_controllers.RemoveIndex(i);
 
-		// it won't send the releases for what it held anymore
+		// it won't send the releases for what it held anymore, nor
+		// bring its sticks back to the centre
 		PadReleaseAll();
+		memset(pad_axes, 0, sizeof(pad_axes));
 		return;
 	}
 }
@@ -843,6 +904,53 @@ static void PadCloseAll(void) {
 	// the input comes up anew, with nothing held
 	pad_events.Clear();
 	memset(pad_keys, 0, sizeof(pad_keys));
+	memset(pad_axes, 0, sizeof(pad_axes));
+}
+
+/*
+=================
+PadFrame
+
+Once a frame, from Sys_GenerateEvents()
+=================
+*/
+static void PadFrame(void) {
+	pad_menu = PadMenuActive();
+}
+
+/*
+=================
+Sys_GetJoystickAxis
+=================
+*/
+float Sys_GetJoystickAxis(int axis) {
+	float x, y;
+
+	if (pad_menu || !pad_controllers.Num()) {
+		return 0.0f;
+	}
+
+	// SDL's stick Y grows downwards, like the pitch does
+	switch (axis) {
+		case AXIS_SIDE:
+			PadStick(SDL_CONTROLLER_AXIS_LEFTX, SDL_CONTROLLER_AXIS_LEFTY, x, y);
+			return x;
+		case AXIS_FORWARD:
+			PadStick(SDL_CONTROLLER_AXIS_LEFTX, SDL_CONTROLLER_AXIS_LEFTY, x, y);
+			return -y;
+		case AXIS_YAW:
+			PadStick(SDL_CONTROLLER_AXIS_RIGHTX, SDL_CONTROLLER_AXIS_RIGHTY, x, y);
+			return x;
+		case AXIS_PITCH:
+			PadStick(SDL_CONTROLLER_AXIS_RIGHTX, SDL_CONTROLLER_AXIS_RIGHTY, x, y);
+			return y;
+	}
+
+	return 0.0f;
+}
+#else
+float Sys_GetJoystickAxis(int axis) {
+	return 0.0f;
 }
 #endif
 
@@ -1566,6 +1674,10 @@ Sys_GenerateEvents
 void Sys_GenerateEvents() {
 
 	handleMouseGrab();
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	PadFrame();
+#endif
 
 	char *s = Sys_ConsoleInput();
 

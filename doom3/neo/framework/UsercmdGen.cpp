@@ -447,7 +447,7 @@ class idUsercmdGenLocal : public idUsercmdGen
 		bool			mouseDown;
 
 		int				mouseDx, mouseDy;	// added to by mouse events
-		int				joystickAxis[MAX_JOYSTICK_AXIS];	// set by joystick events
+		float			joystickAxis[MAX_JOYSTICK_AXIS];	// game controller sticks, -1..1
 
 		static idCVar	in_yawSpeed;
 		static idCVar	in_pitchSpeed;
@@ -464,6 +464,8 @@ class idUsercmdGenLocal : public idUsercmdGen
 		static idCVar	m_smooth;
 		static idCVar	m_strafeSmooth;
 		static idCVar	m_showMouseRate;
+		static idCVar	joy_lookSpeed;
+		static idCVar	joy_invertY;
 };
 
 idCVar idUsercmdGenLocal::in_yawSpeed("in_yawspeed", "140", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_FLOAT, "yaw change speed when holding down _left or _right button");
@@ -485,6 +487,8 @@ idCVar idUsercmdGenLocal::m_strafeScale("m_strafeScale", "6.25", CVAR_SYSTEM | C
 idCVar idUsercmdGenLocal::m_smooth("m_smooth", "1", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "number of samples blended for mouse viewing", 1, 8, idCmdSystem::ArgCompletion_Integer<1,8>);
 idCVar idUsercmdGenLocal::m_strafeSmooth("m_strafeSmooth", "4", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "number of samples blended for mouse moving", 1, 8, idCmdSystem::ArgCompletion_Integer<1,8>);
 idCVar idUsercmdGenLocal::m_showMouseRate("m_showMouseRate", "0", CVAR_SYSTEM | CVAR_BOOL, "shows mouse movement");
+idCVar idUsercmdGenLocal::joy_lookSpeed("joy_lookSpeed", "180", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_FLOAT, "game controller look speed, degrees per second with the right stick all the way out");
+idCVar idUsercmdGenLocal::joy_invertY("joy_invertY", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "invert the game controller's up and down look");
 
 static idUsercmdGenLocal localUsercmdGen;
 idUsercmdGen	*usercmdGen = &localUsercmdGen;
@@ -792,32 +796,32 @@ void idUsercmdGenLocal::MouseMove(void)
 /*
 =================
 idUsercmdGenLocal::JoystickMove
+
+Game controller sticks: the left one moves, the right one looks
 =================
 */
 void idUsercmdGenLocal::JoystickMove(void)
 {
-	float	anglespeed;
+	// the stick is already clamped to a circle, and the player's speed
+	// follows the length of the move, so a slight push walks
+	cmd.forwardmove = idMath::ClampChar(cmd.forwardmove + idMath::Ftoi(joystickAxis[AXIS_FORWARD] * KEY_MOVESPEED));
+	cmd.rightmove = idMath::ClampChar(cmd.rightmove + idMath::Ftoi(joystickAxis[AXIS_SIDE] * KEY_MOVESPEED));
 
-#if defined(_RAVEN) || defined(_SPLASHDAMAGE) //karin: in_alwaysRun default on, and not only in MP game.
-	if (toggled_run.on ^(in_alwaysRun.GetBool())) 
-#else
-	if (toggled_run.on ^(in_alwaysRun.GetBool() && idAsyncNetwork::IsActive())) 
-#endif
-	{
-		anglespeed = idMath::M_MS2SEC * USERCMD_MSEC * in_angleSpeedKey.GetFloat();
-	} else {
-		anglespeed = idMath::M_MS2SEC * USERCMD_MSEC;
+	float yaw = joystickAxis[AXIS_YAW];
+	float pitch = joystickAxis[AXIS_PITCH];
+
+	if (joy_invertY.GetBool()) {
+		pitch = -pitch;
 	}
 
-	if (!ButtonState(UB_STRAFE)) {
-		viewangles[YAW] += anglespeed * in_yawSpeed.GetFloat() * joystickAxis[AXIS_SIDE];
-		viewangles[PITCH] += anglespeed * in_pitchSpeed.GetFloat() * joystickAxis[AXIS_FORWARD];
-	} else {
-		cmd.rightmove = idMath::ClampChar(cmd.rightmove + joystickAxis[AXIS_SIDE]);
-		cmd.forwardmove = idMath::ClampChar(cmd.forwardmove + joystickAxis[AXIS_FORWARD]);
-	}
+	// degrees per second like the turn keys, so the frame rate doesn't
+	// matter; the speed grows with the square of the deflection, which
+	// leaves room for fine aiming near the centre
+	float length = idMath::Sqrt(yaw * yaw + pitch * pitch);
+	float speed = joy_lookSpeed.GetFloat() * idMath::M_MS2SEC * USERCMD_MSEC * length;
 
-	cmd.upmove = idMath::ClampChar(cmd.upmove + joystickAxis[AXIS_UP]);
+	viewangles[YAW] -= speed * yaw;
+	viewangles[PITCH] += speed * pitch;
 }
 
 /*
@@ -1268,7 +1272,9 @@ idUsercmdGenLocal::Joystick
 */
 void idUsercmdGenLocal::Joystick(void)
 {
-	memset(joystickAxis, 0, sizeof(joystickAxis));
+	for (int i = 0; i < MAX_JOYSTICK_AXIS; i++) {
+		joystickAxis[i] = Sys_GetJoystickAxis(i);
+	}
 }
 
 /*
