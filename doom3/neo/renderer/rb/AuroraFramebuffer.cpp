@@ -686,6 +686,79 @@ bool idAuroraFramebuffer::Resize(int w, int h)
 
 /*
 ====================
+idAuroraFramebuffer::WindowToContent
+
+The quad turns the buffer counter-clockwise by the transform in a y-up space;
+in 0..1 coordinates with y down that works out to:
+
+    transform     window (x, y) shows content
+    0             (    x,     y)
+    90            (1 - y,     x)
+    180           (1 - x, 1 - y)
+    270           (    y, 1 - x)
+====================
+*/
+void idAuroraFramebuffer::WindowToContent(float x, float y, float *outX, float *outY) const
+{
+    switch (rotation) {
+        case AURORA_TRANSFORM_90:
+            *outX = 1.0f - y;
+            *outY = x;
+            break;
+
+        case AURORA_TRANSFORM_180:
+            *outX = 1.0f - x;
+            *outY = 1.0f - y;
+            break;
+
+        case AURORA_TRANSFORM_270:
+            *outX = y;
+            *outY = 1.0f - x;
+            break;
+
+        case AURORA_TRANSFORM_NORMAL:
+        default:
+            *outX = x;
+            *outY = y;
+            break;
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::ContentToWindow
+
+The inverse of WindowToContent().
+====================
+*/
+void idAuroraFramebuffer::ContentToWindow(float x, float y, float *outX, float *outY) const
+{
+    switch (rotation) {
+        case AURORA_TRANSFORM_90:
+            *outX = y;
+            *outY = 1.0f - x;
+            break;
+
+        case AURORA_TRANSFORM_180:
+            *outX = 1.0f - x;
+            *outY = 1.0f - y;
+            break;
+
+        case AURORA_TRANSFORM_270:
+            *outX = 1.0f - y;
+            *outY = x;
+            break;
+
+        case AURORA_TRANSFORM_NORMAL:
+        default:
+            *outX = x;
+            *outY = y;
+            break;
+    }
+}
+
+/*
+====================
 idAuroraFramebuffer::Shutdown
 ====================
 */

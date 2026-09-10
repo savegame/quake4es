@@ -86,8 +86,6 @@ static void Aurora_TransformPosition(int x, int y, int *outX, int *outY)
 {
 	const int windowWidth = auroraFramebuffer.WindowWidth();
 	const int windowHeight = auroraFramebuffer.WindowHeight();
-	const int bufferWidth = auroraFramebuffer.Width();
-	const int bufferHeight = auroraFramebuffer.Height();
 
 	if (windowWidth <= 0 || windowHeight <= 0) {
 		*outX = x;
@@ -95,38 +93,13 @@ static void Aurora_TransformPosition(int x, int y, int *outX, int *outY)
 		return;
 	}
 
-	// to normalized device coordinates, y up
-	const float nx = 2.0f * x / windowWidth - 1.0f;
-	const float ny = 1.0f - 2.0f * y / windowHeight;
+	float cx;
+	float cy;
 
-	float bx;
-	float by;
+	auroraFramebuffer.WindowToContent((float)x / windowWidth, (float)y / windowHeight, &cx, &cy);
 
-	switch (auroraFramebuffer.GetRotation()) {
-		case AURORA_TRANSFORM_90:
-			bx = ny;
-			by = -nx;
-			break;
-
-		case AURORA_TRANSFORM_180:
-			bx = -nx;
-			by = -ny;
-			break;
-
-		case AURORA_TRANSFORM_270:
-			bx = -ny;
-			by = nx;
-			break;
-
-		case AURORA_TRANSFORM_NORMAL:
-		default:
-			bx = nx;
-			by = ny;
-			break;
-	}
-
-	*outX = (int)((bx + 1.0f) * 0.5f * bufferWidth);
-	*outY = (int)((1.0f - by) * 0.5f * bufferHeight);
+	*outX = (int)(cx * auroraFramebuffer.Width());
+	*outY = (int)(cy * auroraFramebuffer.Height());
 }
 
 /*

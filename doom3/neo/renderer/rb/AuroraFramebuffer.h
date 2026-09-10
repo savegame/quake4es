@@ -97,6 +97,21 @@ class idAuroraFramebuffer
             return transform == AURORA_TRANSFORM_90 || transform == AURORA_TRANSFORM_270;
         }
 
+        // The content is the picture the way the viewer sees it: the window
+        // turned by the transform, the buffer at the scale of the window.
+        // These map 0..1 coordinates, y down, between the window and the
+        // content, with the very turn the quad makes.
+        void                WindowToContent(float x, float y, float *outX, float *outY) const;
+        void                ContentToWindow(float x, float y, float *outX, float *outY) const;
+
+        // size of the content in pixels of the window
+        int                 ContentWidth(void) const {
+            return TransformIsSideways(rotation) ? windowHeight : windowWidth;
+        }
+        int                 ContentHeight(void) const {
+            return TransformIsSideways(rotation) ? windowWidth : windowHeight;
+        }
+
     private:
         bool                Build(int windowWidth, int windowHeight, auroraTransform_t transform, float scale);
         void                BufferSizeForWindow(int windowWidth, int windowHeight, float scale, int *outWidth, int *outHeight) const;
