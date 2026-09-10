@@ -121,7 +121,14 @@ const char *Sys_EXEPath( void ) {
 
 const char * Sys_DLLDefaultPath(void)
 {
+#ifdef _AURORA
+	/* The package installs the game library here, next to the SDL2 it ships.
+	   An Aurora application may only read from its own package directory,
+	   and the working directory it starts in has nothing of ours in it. */
+	return "/usr/share/" AURORA_ORG "." AURORA_APP "/lib";
+#else
 	return "./";
+#endif
 }
 
 /*
