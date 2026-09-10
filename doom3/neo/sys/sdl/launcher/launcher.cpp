@@ -141,7 +141,13 @@ std::string g_launch_mod;
 
 /* Touch: tap vs drag. Finger motion is NOT translated into mouse motion
    (buttons would drag-select): a drag becomes MouseWheel pulses to the
-   hovered ImGui window, a tap is a single down+up at the touch point. */
+   hovered ImGui window, a tap is a single down+up at the touch point.
+
+   Every synthesized mouse event must carry the launcher window id: the SDL2
+   backend drops mouse events whose windowID does not name the window ImGui
+   was initialised with (ImGui_ImplSDL2_GetViewportForWindowID), and a zeroed
+   SDL_Event carries id 0. Without it the taps are silently swallowed and the
+   UI does not react to touch at all. */
 struct TouchState
 {
 	bool  active     = false;
@@ -352,6 +358,7 @@ void ProcessTouchEvent( const SDL_Event &in, int win_w, int win_h )
 		SDL_Event mv = {};
 		mv.type = SDL_MOUSEMOTION;
 		mv.motion.timestamp = in.tfinger.timestamp;
+		mv.motion.windowID  = SDL_GetWindowID( g_window );
 		mv.motion.which     = SDL_TOUCH_MOUSEID;
 		mv.motion.x         = (int)px;
 		mv.motion.y         = (int)py;
@@ -376,6 +383,7 @@ void ProcessTouchEvent( const SDL_Event &in, int win_w, int win_h )
 			SDL_Event d = {};
 			d.type = SDL_MOUSEBUTTONDOWN;
 			d.button.timestamp = in.tfinger.timestamp;
+			d.button.windowID  = SDL_GetWindowID( g_window );
 			d.button.which     = SDL_TOUCH_MOUSEID;
 			d.button.button    = SDL_BUTTON_LEFT;
 			d.button.state     = SDL_PRESSED;

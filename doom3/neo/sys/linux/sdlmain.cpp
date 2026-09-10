@@ -33,6 +33,9 @@ If you have questions concerning this license or the applicable additional terms
 #include <fcntl.h>
 
 #include <SDL_main.h>
+#ifdef _AURORA_LAUNCHER
+#include <SDL_hints.h>
+#endif
 
 #include "../platform.h"
 #include "../../framework/Licensee.h"
@@ -1039,6 +1042,14 @@ int main(int argc, char **argv) {
 	setenv("LC_ALL", "C", 1);
 
 	Posix_InitSignalHandlers();
+
+#ifdef _AURORA_LAUNCHER
+	/* SDL reads this when the mouse subsystem comes up, so it has to be set
+	   before the video subsystem is initialised. The launcher turns finger
+	   events into mouse events itself; with SDL synthesizing them too every
+	   tap would arrive twice and buttons would fire twice. */
+	SDL_SetHint( SDL_HINT_TOUCH_MOUSE_EVENTS, "0" );
+#endif
 
 	//karin: SDL init in here from idCommon::Init
     extern void Sys_InitSDL(void);
