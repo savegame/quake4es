@@ -128,8 +128,8 @@ idAuroraFramebuffer::idAuroraFramebuffer()
     height(0),
     windowWidth(0),
     windowHeight(0),
-    referenceWindowWidth(0),
-    referenceWindowHeight(0),
+    referenceDisplayWidth(0),
+    referenceDisplayHeight(0),
     rotation(AURORA_TRANSFORM_NORMAL),
     scale(1.0f),
     currentRotationMatrix(NULL),
@@ -374,17 +374,39 @@ void idAuroraFramebuffer::PublishSize(void)
 
 /*
 ====================
-idAuroraFramebuffer::SetReferenceWindowSize
+idAuroraFramebuffer::SetReferenceDisplaySize
+
+Display 0 is the built-in one. Its size, not the size of whatever window the
+application happens to be in, is what the render scale was chosen against, so
+it is the budget every other window is measured by.
 ====================
 */
-void idAuroraFramebuffer::SetReferenceWindowSize(int w, int h)
+void idAuroraFramebuffer::SetReferenceDisplaySize(int w, int h)
 {
     if (w <= 0 || h <= 0) {
         return;
     }
 
-    referenceWindowWidth = w;
-    referenceWindowHeight = h;
+    if (w == referenceDisplayWidth && h == referenceDisplayHeight) {
+        return;
+    }
+
+    referenceDisplayWidth = w;
+    referenceDisplayHeight = h;
+
+    if (!active) {
+        return;
+    }
+
+    const int oldWidth = width;
+    const int oldHeight = height;
+
+    Build(windowWidth, windowHeight, rotation, scale);
+
+    if (width != oldWidth || height != oldHeight) {
+        common->Printf("[Aurora FBO]: reference display %d x %d, buffer %d x %d\n",
+                       referenceDisplayWidth, referenceDisplayHeight, width, height);
+    }
 }
 
 /*
@@ -396,41 +418,43 @@ the device can only just afford it. Moving the window to an external display
 must not quietly raise the cost — a phone that manages half of its own screen
 will not manage a 4K one.
 
-So on any window other than the reference the buffer keeps the reference pixel
-budget and only takes the new aspect ratio: the reference buffer is fitted
-into the new window, largest side first.
+So the budget is the size of display 0 taken at the render scale, and it is a
+ceiling: a window is rendered at the scale it asks for, unless that would not
+fit the budget, in which case the budget is fitted into the window instead and
+the new aspect ratio is kept.
 
-    scale  = min(referenceBufferWidth / windowWidth,
-                 referenceBufferHeight / windowHeight)
-    buffer = windowWidth * scale, windowHeight * scale
+    budget = referenceDisplaySize * scale
+    factor = min(scale, budgetWidth / windowWidth, budgetHeight / windowHeight)
+    buffer = windowSize * factor
 
-A 1000x600 buffer moved onto a 2560x1440 screen becomes 1000x562: the same
-number of pixels to fill, in 16:9 instead of 5:3.
+With display 0 at 2000x1200 and a scale of 0.5 the budget is 1000x600, and a
+2560x1440 screen gets 1000x562: the same number of pixels to fill, in 16:9
+instead of 5:3. A window smaller than display 0 keeps its own scale rather
+than being blown up to the budget.
 ====================
 */
 void idAuroraFramebuffer::BufferSizeForWindow(int w, int h, float bufferScale, int *outWidth, int *outHeight) const
 {
-    float width = w * bufferScale;
-    float height = h * bufferScale;
+    float factor = bufferScale;
 
-    if (referenceWindowWidth > 0 && referenceWindowHeight > 0 &&
-            (w != referenceWindowWidth || h != referenceWindowHeight)) {
-        const float referenceWidth = referenceWindowWidth * bufferScale;
-        const float referenceHeight = referenceWindowHeight * bufferScale;
+    if (referenceDisplayWidth > 0 && referenceDisplayHeight > 0) {
+        const float budgetWidth = referenceDisplayWidth * bufferScale;
+        const float budgetHeight = referenceDisplayHeight * bufferScale;
 
-        float fit = referenceWidth / w;
-        const float fitHeight = referenceHeight / h;
+        const float fitWidth = budgetWidth / w;
+        const float fitHeight = budgetHeight / h;
 
-        if (fitHeight < fit) {
-            fit = fitHeight;
+        if (fitWidth < factor) {
+            factor = fitWidth;
         }
 
-        width = w * fit;
-        height = h * fit;
+        if (fitHeight < factor) {
+            factor = fitHeight;
+        }
     }
 
-    *outWidth = (int)width;
-    *outHeight = (int)height;
+    *outWidth = (int)(w * factor);
+    *outHeight = (int)(h * factor);
 
     if (*outWidth < 1) {
         *outWidth = 1;
@@ -551,9 +575,8 @@ bool idAuroraFramebuffer::Init(int w, int h)
         initialScale = AURORA_SCALE_MAX;
     }
 
-    // the display the application starts on is the built-in one, and it is
-    // the reference the render scale was chosen for
-    SetReferenceWindowSize(w, h);
+    // the reference display is reported by the platform layer right after
+    // this, in Aurora_DisplayInit()
 
     // no rotation until the platform layer reports the display orientation
     if (!Build(w, h, AURORA_TRANSFORM_NORMAL, initialScale)) {
@@ -654,13 +677,9 @@ bool idAuroraFramebuffer::Resize(int w, int h)
         return false;
     }
 
-    if (windowWidth != referenceWindowWidth || windowHeight != referenceWindowHeight) {
-        common->Printf("[Aurora FBO]: window %d x %d, buffer %d x %d, fitted into the %d x %d budget of the reference display\n",
-                       windowWidth, windowHeight, width, height,
-                       (int)(referenceWindowWidth * scale), (int)(referenceWindowHeight * scale));
-    } else {
-        common->Printf("[Aurora FBO]: window %d x %d, buffer %d x %d\n", windowWidth, windowHeight, width, height);
-    }
+    common->Printf("[Aurora FBO]: window %d x %d, buffer %d x %d, budget %d x %d\n",
+                   windowWidth, windowHeight, width, height,
+                   (int)(referenceDisplayWidth * scale), (int)(referenceDisplayHeight * scale));
 
     return true;
 }
@@ -704,7 +723,7 @@ void idAuroraFramebuffer::Shutdown(void)
 
     width = height = 0;
     windowWidth = windowHeight = 0;
-    referenceWindowWidth = referenceWindowHeight = 0;
+    referenceDisplayWidth = referenceDisplayHeight = 0;
     rotation = AURORA_TRANSFORM_NORMAL;
     scale = 1.0f;
 }

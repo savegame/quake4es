@@ -70,10 +70,10 @@ class idAuroraFramebuffer
         // Real window size changed: rebuild the buffer to match it.
         bool                Resize(int windowWidth, int windowHeight);
 
-        // The built-in display is the reference: the user tuned the render
-        // scale for it, so its size is what the pixel budget is measured
-        // against. Set once, from the window the application starts in.
-        void                SetReferenceWindowSize(int w, int h);
+        // Display 0 is the built-in one and it is the reference: the user
+        // tuned the render scale for it, so its size is what the pixel budget
+        // is measured against, whatever window the application ends up in.
+        void                SetReferenceDisplaySize(int w, int h);
 
         // size the engine believes the screen is
         int                 Width(void) const {
@@ -115,8 +115,8 @@ class idAuroraFramebuffer
         int                 windowWidth;
         int                 windowHeight;
 
-        int                 referenceWindowWidth;
-        int                 referenceWindowHeight;
+        int                 referenceDisplayWidth;
+        int                 referenceDisplayHeight;
 
         auroraTransform_t   rotation;
         float               scale;

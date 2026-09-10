@@ -58,6 +58,44 @@ static void Aurora_DetectPanel(void)
 
 /*
 ====================
+Aurora_SetReferenceDisplay
+
+Display 0 is the built-in one: it is the first the compositor reports and the
+one the user tuned the render scale against, so its size is the pixel budget
+every window is measured by, whatever display the window itself ends up on.
+
+Usable bounds first, the desktop mode only as a fallback: on a portrait panel
+the bounds already account for the compositor transform, while a bare desktop
+mode can report the panel's native landscape instead.
+====================
+*/
+static void Aurora_SetReferenceDisplay(void)
+{
+	SDL_Rect bounds;
+	SDL_DisplayMode mode;
+	int w = 0;
+	int h = 0;
+
+	if (SDL_GetDisplayUsableBounds(0, &bounds) == 0 && bounds.w > 0 && bounds.h > 0) {
+		w = bounds.w;
+		h = bounds.h;
+	} else if (SDL_GetDesktopDisplayMode(0, &mode) == 0) {
+		w = mode.w;
+		h = mode.h;
+	}
+
+	if (w <= 0 || h <= 0) {
+		common->Warning("[Aurora display]: cannot read the size of display 0: %s", SDL_GetError());
+		return;
+	}
+
+	common->Printf("[Aurora display]: reference display 0 is %d x %d\n", w, h);
+
+	auroraFramebuffer.SetReferenceDisplaySize(w, h);
+}
+
+/*
+====================
 Aurora_TransformForOrientation
 
 Both observable values, the orientation SDL reports and the shape of the
@@ -210,6 +248,7 @@ Aurora_DisplayInit
 */
 void Aurora_DisplayInit(void)
 {
+	Aurora_SetReferenceDisplay();
 	Aurora_DetectPanel();
 
 	if (r_auroraRotation.GetInteger() >= 0) {
