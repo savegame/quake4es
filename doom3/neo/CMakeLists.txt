@@ -283,6 +283,20 @@ if(GAMECONTROLLERDB_FILE)
 	message(STATUS "Copy game controller mappings next to the executable: ${GAMECONTROLLERDB_FILE}")
 endif()
 
+# The default game controller bindings, gamepad.cfg, are looked for next to
+# the executable as well
+set(GAMEPAD_CFG_FILE "" CACHE FILEPATH "gamepad.cfg with default game controller bindings to copy next to the executable")
+if(GAMEPAD_CFG_FILE)
+	add_custom_command(
+		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gamepad.cfg"
+		COMMAND ${CMAKE_COMMAND} -E copy "${GAMEPAD_CFG_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/gamepad.cfg"
+		DEPENDS "${GAMEPAD_CFG_FILE}"
+		COMMENT "Copying gamepad.cfg next to the executable"
+	)
+	add_custom_target(gamepadcfg ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/gamepad.cfg")
+	message(STATUS "Copy default game controller bindings next to the executable: ${GAMEPAD_CFG_FILE}")
+endif()
+
 if(OPENGLES3)
 	add_definitions(-D_OPENGLES3)
 	message(STATUS "Build OpenGLES3 support")

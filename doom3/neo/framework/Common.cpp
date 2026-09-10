@@ -3537,6 +3537,66 @@ void idCommonLocal::Shutdown(void)
 	idLib::ShutDown();
 }
 
+#ifndef _SPLASHDAMAGE
+/*
+=================
+Com_BindGamepadDefaults
+
+The package brings default bindings for the game controller keys in
+gamepad.cfg: in the package directory on Aurora OS, next to the executable
+otherwise. exec can't reach it there, it only reads through the file
+system. Run before CONFIG_FILE, it would be wiped by the unbindall that
+file starts with; run after it as it is, it would replace the user's own
+bindings. So it runs after CONFIG_FILE and every key the configs bound
+gets its binding back: the defaults only land on the keys left unbound.
+autoexec.cfg runs after it, a key can be unbound for good there.
+=================
+*/
+static void Com_BindGamepadDefaults(void)
+{
+	idFile *f = NULL;
+
+#ifdef _AURORA
+	f = fileSystem->OpenExplicitFileRead("/usr/share/" AURORA_ORG "." AURORA_APP "/gamepad.cfg");
+#endif
+
+	if (!f) {
+		idStr path = Sys_EXEPath();
+		path.StripFilename();
+		path.AppendPath("gamepad.cfg");
+		f = fileSystem->OpenExplicitFileRead(path.c_str());
+	}
+
+	if (!f) {
+		return;
+	}
+
+	int len = f->Length();
+	char *text = (char *)Mem_ClearedAlloc(len + 1);
+	f->Read(text, len);
+	common->Printf("execing %s for the keys still unbound\n", f->GetFullPath());
+	fileSystem->CloseFile(f);
+
+	idStrList bound;
+	bound.SetNum(K_LAST_KEY);
+
+	for (int i = 0; i < K_LAST_KEY; i++) {
+		bound[i] = idKeyInput::GetBinding(i);
+	}
+
+	cmdSystem->BufferCommandText(CMD_EXEC_APPEND, text);
+	cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "\n");
+	cmdSystem->ExecuteCommandBuffer();
+	Mem_Free(text);
+
+	for (int i = 0; i < K_LAST_KEY; i++) {
+		if (bound[i].Length() && bound[i].Cmp(idKeyInput::GetBinding(i))) {
+			idKeyInput::SetBinding(i, bound[i]);
+		}
+	}
+}
+#endif
+
 /*
 =================
 idCommonLocal::InitGame
@@ -3598,6 +3658,12 @@ void idCommonLocal::InitGame(void)
 	if (!SafeMode()) {
 		cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "exec " CONFIG_FILE "\n");
 	}
+
+#ifndef _SPLASHDAMAGE
+	// between the user's two configs, see there
+	cmdSystem->ExecuteCommandBuffer();
+	Com_BindGamepadDefaults();
+#endif
 
 	cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "exec autoexec.cfg\n");
 
