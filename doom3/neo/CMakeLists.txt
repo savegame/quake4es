@@ -266,6 +266,23 @@ else()
 	set(src_aurora_launcher)
 endif()
 
+# SDL knows only a handful of game controllers by itself; the engine also looks
+# for the community mapping database (SDL_GameControllerDB) next to the
+# executable. Point this at a gamecontrollerdb.txt to have it copied there on
+# every build, which is what a build tree needs to be run from; packages
+# install the file where they see fit themselves
+set(GAMECONTROLLERDB_FILE "" CACHE FILEPATH "gamecontrollerdb.txt to copy next to the executable")
+if(GAMECONTROLLERDB_FILE)
+	add_custom_command(
+		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/gamecontrollerdb.txt"
+		COMMAND ${CMAKE_COMMAND} -E copy "${GAMECONTROLLERDB_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/gamecontrollerdb.txt"
+		DEPENDS "${GAMECONTROLLERDB_FILE}"
+		COMMENT "Copying gamecontrollerdb.txt next to the executable"
+	)
+	add_custom_target(gamecontrollerdb ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/gamecontrollerdb.txt")
+	message(STATUS "Copy game controller mappings next to the executable: ${GAMECONTROLLERDB_FILE}")
+endif()
+
 if(OPENGLES3)
 	add_definitions(-D_OPENGLES3)
 	message(STATUS "Build OpenGLES3 support")

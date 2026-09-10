@@ -517,6 +517,88 @@ static void PushConsoleEvent(const char *s) {
 	SDL_PushEvent(&event);
 }
 
+#if SDL_VERSION_ATLEAST(2, 0, 2) // SDL_GameControllerAddMappingsFromFile()
+/*
+=================
+AddControllerMappingsFromFile
+
+Returns false if the file is not there or can't be read, which is not an
+error: every place the mappings are looked for is optional.
+=================
+*/
+static bool AddControllerMappingsFromFile(const char *path) {
+	int added = SDL_GameControllerAddMappingsFromFile(path);
+
+	if (added < 0) {
+		return false;
+	}
+
+	// SDL counts only the controllers it had no mapping for yet,
+	// the ones whose mapping got replaced are not in the number
+	common->Printf("Loaded game controller mappings from '%s' (%d new)\n", path, added);
+	return true;
+}
+
+/*
+=================
+LoadControllerMappings
+
+SDL only knows a handful of controllers by itself, the community database
+(SDL_GameControllerDB's gamecontrollerdb.txt) teaches it hundreds more.
+A mapping loaded later replaces an earlier one for the same controller, so
+the copy shipped with the game goes first and the user's own file in
+fs_savepath last: that way a mapping can be fixed or added without
+rebuilding anything. This is why it is done here and not right after SDL
+init: fs_savepath is only settled once the file system is up.
+=================
+*/
+static void LoadControllerMappings(void) {
+	static bool loaded = false;
+	bool found = false;
+	idStr path;
+
+	// vid_restart brings the input back up, the mappings stay where they are
+	if (loaded) {
+		return;
+	}
+	loaded = true;
+
+#ifdef _AURORA
+	// the package installs it into its own directory, see Sys_DLLDefaultPath()
+	found = AddControllerMappingsFromFile("/usr/share/" AURORA_ORG "." AURORA_APP "/gamecontrollerdb.txt");
+#endif
+
+	if (!found) {
+		// a build tree keeps it next to the executable
+		path = Sys_EXEPath();
+		path.StripFilename();
+		path.AppendPath("gamecontrollerdb.txt");
+		found = AddControllerMappingsFromFile(path.c_str());
+	}
+
+	path = cvarSystem->GetCVarString("fs_savepath");
+	path.AppendPath("gamecontrollerdb.txt");
+	if (AddControllerMappingsFromFile(path.c_str())) {
+		found = true;
+	}
+
+#ifdef SDL_HINT_GAMECONTROLLERCONFIG_FILE
+	// SDL has read this file already, when the subsystem came up, and the
+	// files above would override it: read it once more so that what the user
+	// pointed SDL at keeps the last word. SDL_GAMECONTROLLERCONFIG needs
+	// nothing like that, its mappings rank above any read from a file
+	const char *hintFile = SDL_GetHint(SDL_HINT_GAMECONTROLLERCONFIG_FILE);
+	if (hintFile && hintFile[0] && AddControllerMappingsFromFile(hintFile)) {
+		found = true;
+	}
+#endif
+
+	if (!found) {
+		common->Printf("No gamecontrollerdb.txt found, only SDL's built-in game controller mappings are known\n");
+	}
+}
+#endif
+
 /*
 =================
 Sys_InitInput
@@ -552,6 +634,10 @@ void Sys_InitInput() {
 	}
 #else // SDL1.2 doesn't support this
 	in_grabKeyboard.ClearModified();
+#endif
+
+#if SDL_VERSION_ATLEAST(2, 0, 2)
+	LoadControllerMappings();
 #endif
 }
 
