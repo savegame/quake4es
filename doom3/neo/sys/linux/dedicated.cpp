@@ -76,6 +76,18 @@ bool Sys_GamepadActive(void)
 	return false;
 }
 
+int Sys_PollUsercmdActionEvents(void)
+{
+	return 0;
+}
+
+int Sys_ReturnUsercmdActionEvent(const int n, int &action, bool &down)
+{
+	return 0;
+}
+
+void Sys_EndUsercmdActionEvents(void) { }
+
 unsigned char Sys_MapCharForKey(int key)
 {
 	return (unsigned char)key;

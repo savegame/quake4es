@@ -115,8 +115,22 @@ struct mouse_poll_t {
 	}
 };
 
+struct action_poll_t {
+	int action;
+	bool down;
+
+	action_poll_t() {
+	}
+
+	action_poll_t(int a, bool d) {
+		action = a;
+		down = d;
+	}
+};
+
 static idList<kbd_poll_t> kbd_polls;
 static idList<mouse_poll_t> mouse_polls;
+static idList<action_poll_t> action_polls;
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 // for utf8ToISO8859_1() - used for non-ascii text input and Sys_GetLocalizedScancodeName()
@@ -1173,6 +1187,7 @@ Sys_InitInput
 void Sys_InitInput() {
 	kbd_polls.SetGranularity(64);
 	mouse_polls.SetGranularity(64);
+	action_polls.SetGranularity(64);
 
 	assert(sizeof(scancodemappings)/sizeof(scancodemappings[0]) == K_NUM_SCANCODES && "scancodemappings incomplete?");
 
@@ -1220,6 +1235,7 @@ Sys_ShutdownInput
 void Sys_ShutdownInput() {
 	kbd_polls.Clear();
 	mouse_polls.Clear();
+	action_polls.Clear();
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	PadCloseAll();
 
@@ -1813,6 +1829,7 @@ void Sys_ClearEvents() {
 
 	kbd_polls.SetNum(0, false);
 	mouse_polls.SetNum(0, false);
+	action_polls.SetNum(0, false);
 }
 
 static void handleMouseGrab() {
@@ -1976,6 +1993,38 @@ Sys_EndMouseInputEvents
 */
 void Sys_EndMouseInputEvents() {
 	mouse_polls.SetNum(0, false);
+}
+
+/*
+================
+Sys_PollUsercmdActionEvents
+================
+*/
+int Sys_PollUsercmdActionEvents() {
+	return action_polls.Num();
+}
+
+/*
+================
+Sys_ReturnUsercmdActionEvent
+================
+*/
+int Sys_ReturnUsercmdActionEvent(const int n, int &action, bool &down) {
+	if (n >= action_polls.Num())
+		return 0;
+
+	action = action_polls[n].action;
+	down = action_polls[n].down;
+	return 1;
+}
+
+/*
+================
+Sys_EndUsercmdActionEvents
+================
+*/
+void Sys_EndUsercmdActionEvents() {
+	action_polls.SetNum(0, false);
 }
 
 #ifdef _AURORA_FBO

@@ -420,8 +420,10 @@ class idUsercmdGenLocal : public idUsercmdGen
 		void			Mouse(void);
 		void			Keyboard(void);
 		void			Joystick(void);
+		void			Actions(void);
 
 		void			Key(int keyNum, bool down);
+		void			Action(int action, bool down);
 
 		idVec3			viewangles;
 		int				flags;
@@ -1186,6 +1188,39 @@ void idUsercmdGenLocal::Key(int keyNum, bool down)
 
 /*
 ===================
+idUsercmdGenLocal::Action
+
+A usercmd action pressed with no key in between: counted like a bound key,
+an impulse fires on the way down
+===================
+*/
+void idUsercmdGenLocal::Action(int action, bool down)
+{
+	if (action <= UB_NONE || action >= UB_MAX_BUTTONS) {
+		return;
+	}
+
+	if (down) {
+		buttonState[ action ]++;
+
+		if (!Inhibited()) {
+			if (action >= UB_IMPULSE0 && action <= UB_IMPULSE61) {
+				cmd.impulse = action - UB_IMPULSE0;
+				cmd.flags ^= UCF_IMPULSE_SEQUENCE;
+			}
+		}
+	} else {
+		buttonState[ action ]--;
+
+		// the state may have been cleared while it was held
+		if (buttonState[ action ] < 0) {
+			buttonState[ action ] = 0;
+		}
+	}
+}
+
+/*
+===================
 idUsercmdGenLocal::Mouse
 ===================
 */
@@ -1278,6 +1313,29 @@ void idUsercmdGenLocal::Joystick(void)
 }
 
 /*
+===============
+idUsercmdGenLocal::Actions
+
+The actions the system presses by itself, the on-screen touch controls
+===============
+*/
+void idUsercmdGenLocal::Actions(void)
+{
+	int numEvents = Sys_PollUsercmdActionEvents();
+
+	for (int i = 0; i < numEvents; i++) {
+		int action;
+		bool down;
+
+		if (Sys_ReturnUsercmdActionEvent(i, action, down)) {
+			Action(action, down);
+		}
+	}
+
+	Sys_EndUsercmdActionEvents();
+}
+
+/*
 ================
 idUsercmdGenLocal::UsercmdInterrupt
 
@@ -1299,6 +1357,9 @@ void idUsercmdGenLocal::UsercmdInterrupt(void)
 
 	// process the system keyboard events
 	Keyboard();
+
+	// process the actions the system presses itself
+	Actions();
 
 	// process the system joystick events
 	Joystick();
@@ -1341,6 +1402,9 @@ usercmd_t idUsercmdGenLocal::GetDirectUsercmd(void)
 
 	// process the system keyboard events
 	Keyboard();
+
+	// process the actions the system presses itself
+	Actions();
 
 	// process the system joystick events
 	Joystick();

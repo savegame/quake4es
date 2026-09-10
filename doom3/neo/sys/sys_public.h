@@ -571,6 +571,14 @@ float			Sys_GetJoystickAxis(int axis);
 // to get out of the way
 bool			Sys_GamepadActive(void);
 
+// usercmd actions pressed by the system itself, with no key in between, so
+// that no binding can change what they do: the on-screen touch controls.
+// action is what idUsercmdGen::CommandStringUsercmdData() returns for the
+// command, e.g. "_attack" or "_impulse13"; down/up come in pairs
+int				Sys_PollUsercmdActionEvents(void);
+int				Sys_ReturnUsercmdActionEvent(const int n, int &action, bool &down);
+void			Sys_EndUsercmdActionEvents(void);
+
 // when the console is down, or the game is about to perform a lengthy
 // operation like map loading, the system can release the mouse cursor
 // when in windowed mode
