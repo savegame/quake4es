@@ -608,7 +608,155 @@ Game controllers
 ===========================================================================
 */
 
+// every button is a key of its own, K_JOY1 + SDL_GameControllerButton: from
+// A = JOY1 to the touchpad = JOY21, the D-pad is JOY12..JOY15. The triggers
+// come after them, still before K_JOY28, which doesn't follow K_JOY27
+const int PAD_NUM_BUTTONS = K_JOY21 - K_JOY1 + 1;
+const int PAD_KEY_LEFTTRIGGER = K_JOY23;
+const int PAD_KEY_RIGHTTRIGGER = K_JOY24;
+
+// a trigger goes down past half way and up again only below a quarter, so
+// that a finger resting around one point doesn't make it flicker
+const int PAD_TRIGGER_DOWN = 16384;
+const int PAD_TRIGGER_UP = 8192;
+
+// what can hold a key down
+enum {
+	PAD_SOURCE_LEFTTRIGGER = PAD_NUM_BUTTONS, // the buttons are the first ones
+	PAD_SOURCE_RIGHTTRIGGER,
+	PAD_NUM_SOURCES
+};
+
 static idList<SDL_GameController *> pad_controllers;
+static idList<sysEvent_t> pad_events;		// waiting for Sys_GetEvent()
+static int pad_keys[PAD_NUM_SOURCES];		// the key each source holds down, 0 if none
+
+/*
+=================
+PadNextEvent
+=================
+*/
+static bool PadNextEvent(sysEvent_t &ev) {
+	if (!pad_events.Num()) {
+		return false;
+	}
+
+	ev = pad_events[0];
+	pad_events.RemoveIndex(0);
+	return true;
+}
+
+/*
+=================
+PadKeyEvent
+
+A key from a controller goes the way one from the keyboard goes: an event
+for the console, the GUIs and the bindings, and the key queue for the
+usercmd generator, the only place _-commands work in
+=================
+*/
+static void PadKeyEvent(int key, bool down) {
+	sysEvent_t ev = { };
+	ev.evType = SE_KEY;
+	ev.evValue = key;
+	ev.evValue2 = down ? 1 : 0;
+	pad_events.Append(ev);
+
+#ifdef _IMGUI
+	if (R_ImGui_IsRunning()) {
+		return;
+	}
+#endif
+
+	kbd_polls.Append(kbd_poll_t(key, down));
+}
+
+/*
+=================
+PadRelease
+
+A source lets go of the key it pressed, even when it would press another
+one by now
+=================
+*/
+static void PadRelease(int source) {
+	if (pad_keys[source]) {
+		PadKeyEvent(pad_keys[source], false);
+		pad_keys[source] = 0;
+	}
+}
+
+/*
+=================
+PadPress
+=================
+*/
+static void PadPress(int source, int key) {
+	if (pad_keys[source] == key) {
+		return;
+	}
+
+	PadRelease(source);
+	pad_keys[source] = key;
+	PadKeyEvent(key, true);
+}
+
+/*
+=================
+PadReleaseAll
+=================
+*/
+static void PadReleaseAll(void) {
+	for (int i = 0; i < PAD_NUM_SOURCES; i++) {
+		PadRelease(i);
+	}
+}
+
+/*
+=================
+PadButton
+=================
+*/
+static void PadButton(int button, bool down) {
+	if (button < 0 || button >= PAD_NUM_BUTTONS) {
+		return;
+	}
+
+	if (down) {
+		PadPress(button, K_JOY1 + button);
+	} else {
+		PadRelease(button);
+	}
+}
+
+/*
+=================
+PadTrigger
+=================
+*/
+static void PadTrigger(int source, int key, int value) {
+	if (!pad_keys[source] && value >= PAD_TRIGGER_DOWN) {
+		PadPress(source, key);
+	} else if (pad_keys[source] && value < PAD_TRIGGER_UP) {
+		PadRelease(source);
+	}
+}
+
+/*
+=================
+PadAxis
+=================
+*/
+static void PadAxis(int axis, int value) {
+	switch (axis) {
+		case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
+			PadTrigger(PAD_SOURCE_LEFTTRIGGER, PAD_KEY_LEFTTRIGGER, value);
+			break;
+		case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
+			PadTrigger(PAD_SOURCE_RIGHTTRIGGER, PAD_KEY_RIGHTTRIGGER, value);
+			break;
+	}
+}
 
 /*
 =================
@@ -660,6 +808,9 @@ static void PadClose(SDL_JoystickID instanceId) {
 
 		SDL_GameControllerClose(pad);
 		pad_controllers.RemoveIndex(i);
+
+		// it won't send the releases for what it held anymore
+		PadReleaseAll();
 		return;
 	}
 }
@@ -688,6 +839,10 @@ static void PadCloseAll(void) {
 		SDL_GameControllerClose(pad_controllers[i]);
 	}
 	pad_controllers.Clear();
+
+	// the input comes up anew, with nothing held
+	pad_events.Clear();
+	memset(pad_keys, 0, sizeof(pad_keys));
 }
 #endif
 
@@ -925,6 +1080,13 @@ sysEvent_t Sys_GetEvent() {
 
 		return res;
 	}
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	// an SDL event from a controller can make more than one of ours
+	if (PadNextEvent(res)) {
+		return res;
+	}
+#endif
 
 	// loop until there is an event we care about (will return then) or no more events
 	while(SDL_PollEvent(&ev)) {
@@ -1277,6 +1439,27 @@ sysEvent_t Sys_GetEvent() {
 
 		case SDL_CONTROLLERDEVICEREMOVED:
 			PadClose(ev.cdevice.which); // and an instance id here
+
+			if (PadNextEvent(res)) {
+				return res;
+			}
+			continue; // handle next event
+
+		case SDL_CONTROLLERBUTTONDOWN:
+		case SDL_CONTROLLERBUTTONUP:
+			PadButton(ev.cbutton.button, ev.cbutton.state == SDL_PRESSED);
+
+			if (PadNextEvent(res)) {
+				return res;
+			}
+			continue; // handle next event
+
+		case SDL_CONTROLLERAXISMOTION:
+			PadAxis(ev.caxis.axis, ev.caxis.value);
+
+			if (PadNextEvent(res)) {
+				return res;
+			}
 			continue; // handle next event
 #endif
 
