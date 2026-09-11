@@ -27,6 +27,9 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include <SDL.h>
+#ifdef _AURORA
+#include <unistd.h>
+#endif
 
 #include "sys/platform.h"
 #include "idlib/containers/List.h"
@@ -1815,6 +1818,15 @@ sysEvent_t Sys_GetEvent() {
 			return res;
 
 		case SDL_QUIT:
+#ifdef _AURORA
+			/* The orderly shutdown often leaves the process hanging once the
+			   compositor has closed the window, and the system then sees an
+			   application that never exits. Keep the user's settings and end
+			   the process right here instead. */
+			common->WriteConfigToFile(CONFIG_FILE);
+			fflush(NULL); // stdout and the console log file
+			_exit(0);
+#endif
 			PushConsoleEvent("quit");
 			return res_none;
 
