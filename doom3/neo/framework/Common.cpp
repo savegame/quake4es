@@ -2712,6 +2712,67 @@ void idCommonLocal::InitCommands(void)
 #endif
 }
 
+#ifndef __ANDROID__
+/*
+=================
+Com_AutoAspectRatio
+
+harm_r_autoAspectRatio where the window is not forced to the screen size. On
+Android Sys_ForceResolution() sets r_aspectRatio once, before the window
+exists. Here the window can be the one of a launcher and r_mode doesn't apply,
+so r_aspectRatio left in a config written on another screen describes nothing
+real, and the menu video presets set it to 0 on their own: the view is then
+built for 4:3 or 16:9 and stretched to the real screen. So it is checked every
+frame, before anything is drawn, and put back whenever it drifts; -1 has
+idGameLocal::CalcFov() take the size the scene is really rendered at.
+=================
+*/
+static void Com_AutoAspectRatio(void)
+{
+	const int autoAspectRatio = cvarSystem->GetCVarInteger("harm_r_autoAspectRatio");
+
+	if (autoAspectRatio <= 0) {
+		return;
+	}
+
+	int aspectRatio;
+
+	if (autoAspectRatio == 2) {
+		const int width = renderSystem->GetScreenWidth();
+		const int height = renderSystem->GetScreenHeight();
+
+		if (width <= 0 || height <= 0) {
+			return;
+		}
+
+		const float r = (float)width / (float)height;
+
+		if (r > 1.7f) {
+			aspectRatio = 1;    // 16:9
+		} else if (r > 1.55f) {
+			aspectRatio = 2;    // 16:10
+#ifdef _SPLASHDAMAGE //karin: r_aspectRatio == 3: 5:4
+		} else if (r > 1.25f) {
+			aspectRatio = 3;    // 5:4
+#endif
+		} else {
+			aspectRatio = 0;    // 4:3
+		}
+	} else {
+#ifdef _SPLASHDAMAGE //karin: r_aspectRatio == -2: automatic
+		aspectRatio = -2;
+#else
+		aspectRatio = -1;
+#endif
+	}
+
+	if (cvarSystem->GetCVarInteger("r_aspectRatio") != aspectRatio) {
+		cvarSystem->SetCVarInteger("r_aspectRatio", aspectRatio);
+		common->Printf("harm_r_autoAspectRatio(%i): r_aspectRatio(%i)\n", autoAspectRatio, aspectRatio);
+	}
+}
+#endif
+
 /*
 =================
 idCommonLocal::InitRenderSystem
@@ -2725,6 +2786,14 @@ void idCommonLocal::InitRenderSystem(void)
 
 #ifdef __ANDROID__ //karin: force setup resolution on Android
 	Sys_ForceResolution();
+#else
+	Com_AutoAspectRatio();
+#endif
+#ifdef _AURORA
+	// The menus are drawn for a 4:3 screen and the phone is about 20:9: keep
+	// them 4:3 in the middle. Set here, after the configs, because the saved
+	// value is the old default 0 on every device the port ever ran on.
+	cvarSystem->SetCVarInteger("r_scaleMenusTo43", 1);
 #endif
 	renderSystem->InitOpenGL();
 	PrintLoadingMessage(common->GetLanguageDict()->GetString("#str_04343"));
@@ -2793,6 +2862,11 @@ void idCommonLocal::Frame(void)
 
 #ifdef _IMGUI
         R_ImGui_HandleCallback();
+#endif
+
+#ifndef __ANDROID__
+		// the events may have changed r_aspectRatio, put it back before drawing
+		Com_AutoAspectRatio();
 #endif
 
 		com_frameTime = com_ticNumber * USERCMD_MSEC;
