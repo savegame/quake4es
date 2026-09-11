@@ -2236,6 +2236,7 @@ void R_VidRestart_f(const idCmdArgs &args)
 
 #ifdef _IMGUI
         RB_ImGui_Shutdown();
+        RB_ShutdownTouchOverlay();
 #endif
 		// free the context and close the window
 		GLimp_Shutdown();
@@ -2686,6 +2687,7 @@ void idRenderSystemLocal::ShutdownOpenGL(void)
 	R_ShutdownFrameData();
 #ifdef _IMGUI
     RB_ImGui_Shutdown();
+    RB_ShutdownTouchOverlay();
 #endif
 	GLimp_Shutdown();
 	glConfig.isInitialized = false;

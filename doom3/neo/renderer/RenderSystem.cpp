@@ -298,6 +298,42 @@ void R_ClearCommandChain(void)
 	frameData->cmdHead->next = NULL;
 }
 
+static touchOverlaySource_t touchOverlaySource = NULL;
+
+/*
+====================
+R_SetTouchOverlaySource
+====================
+*/
+void R_SetTouchOverlaySource(touchOverlaySource_t source)
+{
+	touchOverlaySource = source;
+}
+
+/*
+====================
+R_AddSwapBuffersCommand
+
+Ends the command list of the frame. The touch overlay of the frame travels
+with it in frame memory, so the back end, which may be a frame behind on its
+own thread, draws the overlay of the frame it is drawing.
+====================
+*/
+static void R_AddSwapBuffersCommand(void)
+{
+	swapBuffersCommand_t *cmd = (swapBuffersCommand_t *)R_GetCommandBuffer(sizeof(*cmd));
+	cmd->commandId = RC_SWAP_BUFFERS;
+	cmd->touchOverlay = NULL;
+
+	if (touchOverlaySource) {
+		touchOverlay_t *overlay = (touchOverlay_t *)R_FrameAlloc(sizeof(*overlay));
+
+		if (touchOverlaySource(overlay)) {
+			cmd->touchOverlay = overlay;
+		}
+	}
+}
+
 /*
 =================
 R_ViewStatistics
@@ -799,8 +835,6 @@ Returns the number of msec spent in the back end
 */
 void idRenderSystemLocal::EndFrame(int *frontEndMsec, int *backEndMsec)
 {
-	emptyCommand_t *cmd;
-
 	if (!glConfig.isInitialized) {
 		return;
 	}
@@ -831,8 +865,7 @@ void idRenderSystemLocal::EndFrame(int *frontEndMsec, int *backEndMsec)
 	GL_CheckErrors();
 
 	// add the swapbuffers command
-	cmd = (emptyCommand_t *)R_GetCommandBuffer(sizeof(*cmd));
-	cmd->commandId = RC_SWAP_BUFFERS;
+	R_AddSwapBuffersCommand();
 #ifdef _SPLASHDAMAGE
 	syncNum++;
 #endif
@@ -1216,8 +1249,6 @@ void idRenderSystemLocal::EndFrame(byte *data, int *frontEndMsec, int *backEndMs
 	}
 	renderCrop_t *rc = &renderCrops[currentRenderCrop];
 
-	emptyCommand_t *cmd;
-
 	if (!glConfig.isInitialized) {
 		return;
 	}
@@ -1248,8 +1279,7 @@ void idRenderSystemLocal::EndFrame(byte *data, int *frontEndMsec, int *backEndMs
 	GL_CheckErrors();
 
 	// add the swapbuffers command
-	cmd = (emptyCommand_t *)R_GetCommandBuffer(sizeof(*cmd));
-	cmd->commandId = RC_SWAP_BUFFERS;
+	R_AddSwapBuffersCommand();
 #ifdef _SPLASHDAMAGE
 	syncNum++;
 #endif

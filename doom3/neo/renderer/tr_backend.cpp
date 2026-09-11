@@ -631,6 +631,12 @@ const void	RB_SwapBuffers(const void *data)
 	auroraFramebuffer.Draw();
 #endif
 
+#ifdef _IMGUI
+	// the on-screen touch controls go over all of it, at the resolution of
+	// the screen rather than that of the frame
+	RB_DrawTouchOverlay(((const swapBuffersCommand_t *)data)->touchOverlay);
+#endif
+
 	// don't flip if drawing to front buffer
 	if (!r_frontBuffer.GetBool()) {
 		GLimp_SwapBuffers();

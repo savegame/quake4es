@@ -111,6 +111,7 @@ typedef idPlane frustum_t[FRUSTUM_PLANES];
 #include "rb/DepthStencilRenderer.h"
 #include "rb/StencilTexture.h"
 #include "rb/AuroraFramebuffer.h"
+#include "TouchOverlay.h"
 #include "Image.h"
 
 #include "MegaTexture.h"
@@ -668,6 +669,11 @@ typedef struct {
 	GLenum	buffer;
 	int		frameCount;
 } setBufferCommand_t;
+
+typedef struct {
+	renderCommand_t		commandId, *next;
+	const touchOverlay_t	*touchOverlay;	// drawn over the frame, NULL for none
+} swapBuffersCommand_t;
 
 typedef struct {
 	renderCommand_t		commandId, *next;

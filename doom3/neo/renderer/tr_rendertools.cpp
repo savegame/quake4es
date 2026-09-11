@@ -3451,4 +3451,5 @@ void RB_DrawElementsImmediate( const srfTriangles_t *tri ) {
 #include "imgui/r_imgui.cpp"
 #include "imgui/r_imgui_event.cpp"
 #include "imgui/r_imgui_settings.cpp"
+#include "imgui/r_touch.cpp"
 #endif
