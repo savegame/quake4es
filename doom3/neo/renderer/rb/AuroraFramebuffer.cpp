@@ -47,7 +47,12 @@ static const char *auroraFragmentShaderSource =
     "\n"
     "void main(void)\n"
     "{\n"
-    "    fragColor = texture(u_texture, var_TexCoord);\n"
+    // The compositor blends the window with whatever is under it by the
+    // alpha of the backbuffer, while the engine leaves its own bookkeeping in
+    // the alpha of the frame. Write opaque pixels, or the window shows through
+    // in dark areas. The overlays drawn afterwards keep it opaque: their blend
+    // adds to the destination alpha instead of scaling it down.
+    "    fragColor = vec4(texture(u_texture, var_TexCoord).rgb, 1.0);\n"
     "}\n";
 
 /*
