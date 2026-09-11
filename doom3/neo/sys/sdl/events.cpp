@@ -43,6 +43,9 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "sys/sys_public.h"
 #include "sys/sdl/touch_ui.h"
+#ifdef _AURORA
+#include "sys/sdl/mce_keepalive.h"
+#endif
 
 #if !SDL_VERSION_ATLEAST(2, 0, 0)
 #define SDL_Keycode SDLKey
@@ -1264,6 +1267,14 @@ void Sys_InitInput() {
 #endif
 
 	TouchUI_Init();
+
+#ifdef _AURORA
+	// the display blanks on a timeout counted from the last touch, and nothing
+	// touches it in a game played with a controller: MCE is asked to hold it on
+	// while the window has the focus. The connection outlives a vid_restart
+	mce_keepalive_init();
+	mce_keepalive_set_prevent_blanking(in_hasFocus);
+#endif
 }
 
 /*
@@ -1516,13 +1527,30 @@ sysEvent_t Sys_GetEvent() {
 					// start playing the game sound world again (when coming from editor)
 					session->SetPlayingSoundWorld();
 
+#ifdef _AURORA
+					mce_keepalive_set_prevent_blanking(true);
+#endif
 					break;
 				case SDL_WINDOWEVENT_FOCUS_LOST:
 					in_hasFocus = false;
 
 					// the fingers on the screen won't be seen being lifted
 					TouchUI_Reset();
+
+#ifdef _AURORA
+					// the display blanks as usual behind other windows
+					mce_keepalive_set_prevent_blanking(false);
+#endif
 					break;
+
+#ifdef _AURORA
+				case SDL_WINDOWEVENT_MINIMIZED:
+					mce_keepalive_set_prevent_blanking(false);
+					break;
+				case SDL_WINDOWEVENT_RESTORED:
+					mce_keepalive_set_prevent_blanking(in_hasFocus);
+					break;
+#endif
 
                 // win_xpos and win_ypos declared on glimp.cpp
                 case SDL_WINDOWEVENT_MOVED:
@@ -1824,6 +1852,7 @@ sysEvent_t Sys_GetEvent() {
 			   application that never exits. Keep the user's settings and end
 			   the process right here instead. */
 			common->WriteConfigToFile(CONFIG_FILE);
+			mce_keepalive_shutdown(); // the display blanks as usual again
 			fflush(NULL); // stdout and the console log file
 			_exit(0);
 #endif
@@ -1880,6 +1909,17 @@ sysEvent_t Sys_GetEvent() {
 			if (PadNextEvent(res)) {
 				return res;
 			}
+			continue; // handle next event
+#endif
+
+#ifdef _AURORA
+		// where SDL tells when the application goes to the background
+		case SDL_APP_WILLENTERBACKGROUND:
+			mce_keepalive_set_prevent_blanking(false);
+			continue; // handle next event
+
+		case SDL_APP_DIDENTERFOREGROUND:
+			mce_keepalive_set_prevent_blanking(in_hasFocus);
 			continue; // handle next event
 #endif
 
@@ -1996,6 +2036,11 @@ void Sys_GenerateEvents() {
 #endif
 
 	TouchUI_Frame();
+
+#ifdef _AURORA
+	// renews the display blanking pause when it is due
+	mce_keepalive_pump();
+#endif
 
 	char *s = Sys_ConsoleInput();
 

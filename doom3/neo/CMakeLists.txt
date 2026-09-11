@@ -244,7 +244,19 @@ if(AURORA)
 	include_directories(${WAYLAND_CLIENT_INCLUDE_DIRS})
 	set(sys_libs ${sys_libs} ${WAYLAND_CLIENT_LIBRARIES})
 
+	# the display blanks on a timeout counted from the last touch, and a game
+	# played with a controller doesn't touch the screen: MCE is asked over the
+	# system bus to hold the display on while the game has the focus
+	pkg_check_modules(GIO REQUIRED gio-2.0 glib-2.0)
+	include_directories(${GIO_INCLUDE_DIRS})
+	set(sys_libs ${sys_libs} ${GIO_LIBRARIES})
+	set(src_aurora
+		sys/sdl/mce_keepalive.c
+	)
+
 	message(STATUS "Build Aurora OS port: ${AURORA_ORG}.${AURORA_APP}")
+else()
+	set(src_aurora)
 endif()
 
 if(AURORA_FBO)
@@ -1924,6 +1936,7 @@ else()
 			sys/linux/sound.cpp
 			sys/linux/sound_alsa.cpp
 			sys/linux/sdlmain.cpp
+			${src_aurora}
 		)
 		set(src_sys_core
 			sys/sdl/glimp.cpp

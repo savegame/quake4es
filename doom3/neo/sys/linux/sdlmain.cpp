@@ -43,6 +43,9 @@ If you have questions concerning this license or the applicable additional terms
 #include "../posix/posix_public.h"
 #include "../sys_local.h"
 #include "../sys_public.h"
+#ifdef _AURORA
+#include "../sdl/mce_keepalive.h"
+#endif
 #ifdef _AURORA_LAUNCHER
 #include "../sdl/launcher/launcher.h"
 #endif
@@ -588,6 +591,10 @@ Sys_Shutdown
 ===============
 */
 void Sys_Shutdown( void ) {
+#ifdef _AURORA
+	// the display blanks as usual again
+	mce_keepalive_shutdown();
+#endif
 	Posix_Shutdown();
 }
 
