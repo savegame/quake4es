@@ -1058,6 +1058,7 @@ set(src_renderer
 	renderer/tr_trisurf.cpp
 	renderer/tr_turboshadow.cpp
 	renderer/tr_rendertools.cpp
+	renderer/imgui/r_font.cpp
 	renderer/etc/etc.cpp
     renderer/matrix/esTransform.c
 )

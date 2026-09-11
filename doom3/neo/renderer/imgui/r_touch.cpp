@@ -11,7 +11,8 @@
 	Drawn with an ImGui context of their own: the settings window keeps its
 	context, style and input to itself, and this one is current only while
 	the overlay is being drawn. Nothing but a draw list is used, no windows,
-	no text, no input; the icons are lines and circles, sharp at any size.
+	no input; the icons are lines and circles, sharp at any size, and the
+	words are the launcher's font, baked at the size they are drawn at.
 
 	The controls are laid out in pixels of the content, the screen the way
 	the viewer sees it. The finished draw data is turned into pixels of the
@@ -25,6 +26,13 @@
 
 static ImGuiContext *touchImGui = NULL;
 static bool touchImGuiFailed = false;
+
+// the pixel sizes the words are drawn at, each baked into the atlas
+static const int TOUCH_MAX_FONTS = 4;
+static int touchFontSizes[TOUCH_MAX_FONTS];
+static ImFont *touchFonts[TOUCH_MAX_FONTS];
+static int touchNumFonts = 0;
+static ImVector<ImWchar> touchGlyphs;	// the letters of the words
 
 // the accent of the launcher's theme
 static const int TOUCH_ACCENT_R = 0x3B;
@@ -99,6 +107,9 @@ void RB_ShutdownTouchOverlay(void)
 
 	ImGui::SetCurrentContext(previous != touchImGui ? previous : NULL);
 	touchImGui = NULL;
+
+	// the fonts went with the atlas of the context
+	touchNumFonts = 0;
 }
 
 /*
@@ -133,144 +144,187 @@ static void RB_TouchArrowHead(ImDrawList *list, const ImVec2 &tip, const ImVec2 
 
 /*
 ====================
-RB_TouchLetterPoint
+RB_TouchFont
+
+The font baked at a pixel size, NULL when it isn't
 ====================
 */
-static ImVec2 RB_TouchLetterPoint(const ImVec2 &origin, float width, float height, float x, float y)
+static ImFont *RB_TouchFont(int size, bool *baked)
 {
-	return ImVec2(origin.x + x * width, origin.y + y * height);
+	for (int i = 0; i < touchNumFonts; i++) {
+		if (touchFontSizes[i] == size) {
+			*baked = true;
+			return touchFonts[i];
+		}
+	}
+
+	*baked = false;
+	return NULL;
 }
 
 /*
 ====================
-RB_TouchLetter
-
-A capital drawn with strokes like the icons, in a box with its top left
-corner at origin; only the letters the controls spell
+RB_TouchFontSize
 ====================
 */
-static void RB_TouchLetter(ImDrawList *list, char letter, const ImVec2 &origin, float width, float height, ImU32 color, float thickness)
+static int RB_TouchFontSize(float buttonHeight)
 {
-	static const float letterS[][2] = {
-		{ 1.0f, 0.15f }, { 0.8f, 0.0f }, { 0.2f, 0.0f }, { 0.0f, 0.2f }, { 0.0f, 0.35f }, { 0.2f, 0.5f },
-		{ 0.8f, 0.5f }, { 1.0f, 0.65f }, { 1.0f, 0.8f }, { 0.8f, 1.0f }, { 0.2f, 1.0f }, { 0.0f, 0.85f }
-	};
-	static const float letterP[][2] = {
-		{ 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.75f, 0.0f }, { 1.0f, 0.18f }, { 1.0f, 0.37f }, { 0.75f, 0.55f }, { 0.0f, 0.55f }
-	};
-	static const float letterA[][2] = {
-		{ 0.0f, 1.0f }, { 0.5f, 0.0f }, { 1.0f, 1.0f }
-	};
-	static const float letterV[][2] = {
-		{ 0.0f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 0.0f }
-	};
-	static const float letterE[][2] = {
-		{ 1.0f, 0.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }
-	};
-	static const float letterL[][2] = {
-		{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }
-	};
-	static const float letterO[][2] = {
-		{ 0.3f, 0.0f }, { 0.7f, 0.0f }, { 1.0f, 0.25f }, { 1.0f, 0.75f }, { 0.7f, 1.0f }, { 0.3f, 1.0f }, { 0.0f, 0.75f }, { 0.0f, 0.25f }
-	};
-	static const float letterD[][2] = {
-		{ 0.0f, 0.0f }, { 0.6f, 0.0f }, { 1.0f, 0.3f }, { 1.0f, 0.7f }, { 0.6f, 1.0f }, { 0.0f, 1.0f }
-	};
+	return Max(8, idMath::Ftoi(TOUCH_FONT_SIZE * buttonHeight + 0.5f));
+}
 
-	const float (*points)[2] = NULL;
-	int numPoints = 0;
-	ImDrawFlags flags = ImDrawFlags_None;
-
-	switch (letter) {
-		case 'S':
-			points = letterS;
-			numPoints = sizeof(letterS) / sizeof(letterS[0]);
-			break;
-
-		case 'P':
-			points = letterP;
-			numPoints = sizeof(letterP) / sizeof(letterP[0]);
-			break;
-
-		case 'A':
-			points = letterA;
-			numPoints = sizeof(letterA) / sizeof(letterA[0]);
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.22f, 0.6f), RB_TouchLetterPoint(origin, width, height, 0.78f, 0.6f), color, thickness);
-			break;
-
-		case 'V':
-			points = letterV;
-			numPoints = sizeof(letterV) / sizeof(letterV[0]);
-			break;
-
-		case 'E':
-			points = letterE;
-			numPoints = sizeof(letterE) / sizeof(letterE[0]);
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.5f), RB_TouchLetterPoint(origin, width, height, 0.8f, 0.5f), color, thickness);
-			break;
-
-		case 'L':
-			points = letterL;
-			numPoints = sizeof(letterL) / sizeof(letterL[0]);
-			break;
-
-		case 'O':
-			points = letterO;
-			numPoints = sizeof(letterO) / sizeof(letterO[0]);
-			flags = ImDrawFlags_Closed;
-			break;
-
-		case 'D':
-			points = letterD;
-			numPoints = sizeof(letterD) / sizeof(letterD[0]);
-			flags = ImDrawFlags_Closed;
-			break;
-
-		case 'K':
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 1.0f), color, thickness);
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 1.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 0.6f), color, thickness);
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.32f, 0.42f), RB_TouchLetterPoint(origin, width, height, 1.0f, 1.0f), color, thickness);
-			return;
-
-		case 'I':
-			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 1.0f), color, thickness);
-			return;
-
-		default:
-			return;
+/*
+====================
+RB_TouchListed
+====================
+*/
+static bool RB_TouchListed(const int *sizes, int numSizes, int size)
+{
+	for (int i = 0; i < numSizes; i++) {
+		if (sizes[i] == size) {
+			return true;
+		}
 	}
 
-	ImVec2 path[12];
+	return false;
+}
 
-	for (int i = 0; i < numPoints; i++) {
-		path[i] = RB_TouchLetterPoint(origin, width, height, points[i][0], points[i][1]);
+/*
+====================
+RB_TouchOverlay_Fonts
+
+The words are written in the launcher's Noto Sans Bold, baked at the very
+pixel size each is drawn at, so that they are as sharp as the lines of the
+icons. The sizes change only with the layout; then the atlas is baked anew,
+with nothing but the letters of the words. Called between the frames of
+the context, while its font texture may be replaced.
+====================
+*/
+static void RB_TouchOverlay_Fonts(const touchOverlay_t *overlay)
+{
+	int sizes[TOUCH_MAX_FONTS];
+	int numSizes = 0;
+	bool missing = false;
+
+	// the sizes this frame writes at come first
+	for (int i = 0; i < overlay->numButtons; i++) {
+		const touchOverlayButton_t &button = overlay->buttons[i];
+
+		if (!TouchOverlay_IconText(button.icon)) {
+			continue;
+		}
+
+		const int size = RB_TouchFontSize(button.h);
+		bool baked;
+
+		RB_TouchFont(size, &baked);
+		missing = missing || !baked;
+
+		if (numSizes < TOUCH_MAX_FONTS && !RB_TouchListed(sizes, numSizes, size)) {
+			sizes[numSizes++] = size;
+		}
 	}
 
-	list->AddPolyline(path, numPoints, color, flags, thickness);
+	if (!missing) {
+		return;
+	}
+
+	// what is baked already stays while there is room: the menu button's
+	// SKIP comes and goes with the cinematics
+	for (int i = 0; i < touchNumFonts && numSizes < TOUCH_MAX_FONTS; i++) {
+		if (!RB_TouchListed(sizes, numSizes, touchFontSizes[i])) {
+			sizes[numSizes++] = touchFontSizes[i];
+		}
+	}
+
+	if (!touchGlyphs.Size) {
+		ImFontGlyphRangesBuilder builder;
+
+		for (int icon = 0; icon < TOUCH_ICON_COUNT; icon++) {
+			const char *text = TouchOverlay_IconText((touchIcon_t)icon);
+
+			if (text) {
+				builder.AddText(text);
+			}
+		}
+
+		builder.BuildRanges(&touchGlyphs);
+	}
+
+	unsigned int dataSize = 0;
+	const unsigned int *data = R_ImGui_NotoSansBold(&dataSize);
+	ImFontAtlas *atlas = ImGui::GetIO().Fonts;
+	bool any = false;
+
+	atlas->Clear();
+
+	for (int i = 0; i < numSizes; i++) {
+		// a size that fails stays listed, without a font, so that it is not
+		// tried again every frame
+		touchFontSizes[i] = sizes[i];
+		touchFonts[i] = atlas->AddFontFromMemoryCompressedTTF(data, (int)dataSize, (float)sizes[i], NULL, touchGlyphs.Data);
+		any = any || touchFonts[i] != NULL;
+	}
+
+	touchNumFonts = numSizes;
+
+	if (!any) {
+		common->Warning("Touch overlay: can't load the font, the words are written in ImGui's own");
+		atlas->AddFontDefault();
+	}
+
+	ImGui_ImplOpenGL3_DestroyFontsTexture();
+	ImGui_ImplOpenGL3_CreateFontsTexture();
 }
 
 /*
 ====================
 RB_TouchText
 
-A word in stroked capitals, centred on c
+A word centred on c, made smaller should it not fit into maxWidth
 ====================
 */
-static void RB_TouchText(ImDrawList *list, const char *text, const ImVec2 &c, float height, ImU32 color, float thickness)
+static void RB_TouchText(ImDrawList *list, const char *text, const ImVec2 &c, float buttonHeight, float maxWidth, ImU32 color)
 {
-	const float letterWidth = TOUCH_LETTER_WIDTH * height;
-	const float gap = TOUCH_LETTER_GAP * height;
-	const int length = idStr::Length(text);
+	bool baked;
+	ImFont *font = RB_TouchFont(RB_TouchFontSize(buttonHeight), &baked);
 
-	float x = c.x - TouchOverlay_TextWidth(text, height) * 0.5f;
-	const float y = c.y - height * 0.5f;
-
-	for (int i = 0; i < length; i++) {
-		const float w = (text[i] == 'I') ? 0.0f : letterWidth;
-
-		RB_TouchLetter(list, text[i], ImVec2(x, y), w, height, color, thickness);
-		x += w + gap;
+	if (!font) {
+		font = ImGui::GetFont();
 	}
+
+	float size = (float)RB_TouchFontSize(buttonHeight);
+	ImVec2 extent = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+
+	if (extent.x > maxWidth && maxWidth > 0.0f) {
+		size *= maxWidth / extent.x;
+		extent = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+	}
+
+	// the capitals are centred, not the line with room for accents and
+	// descenders: their top and bottom are those of their glyphs
+	float top = FLT_MAX;
+	float bottom = -FLT_MAX;
+
+	for (int i = 0; text[i]; i++) {
+		const ImFontGlyph *glyph = font->FindGlyph((ImWchar)text[i]);
+
+		if (glyph) {
+			top = Min(top, glyph->Y0);
+			bottom = Max(bottom, glyph->Y1);
+		}
+	}
+
+	if (top > bottom) {
+		top = 0.0f;
+		bottom = font->FontSize;
+	}
+
+	const float scale = size / font->FontSize;
+
+	// on whole pixels, where the atlas was baked for them
+	const ImVec2 pos(idMath::Floor(c.x - extent.x * 0.5f + 0.5f), idMath::Floor(c.y - (top + bottom) * 0.5f * scale + 0.5f));
+
+	list->AddText(font, size, pos, color, text);
 }
 
 /*
@@ -413,7 +467,7 @@ static void RB_TouchOverlay_Build(ImDrawList *list, const touchOverlay_t *overla
 
 			list->AddRectFilled(min, max, fill, rounding);
 			list->AddRect(min, max, edge, rounding, ImDrawFlags_None, ring);
-			RB_TouchText(list, text, c, TOUCH_TEXT_HEIGHT * button.h, content, stroke * 0.75f);
+			RB_TouchText(list, text, c, button.h, button.w - TOUCH_TEXT_PADDING * button.h, content);
 			continue;
 		}
 
@@ -525,6 +579,7 @@ void RB_DrawTouchOverlay(const touchOverlay_t *overlay)
 	io.DeltaTime = 1.0f / 60.0f;
 
 	ImGui_ImplOpenGL3_NewFrame();
+	RB_TouchOverlay_Fonts(overlay);
 	ImGui::NewFrame();
 	RB_TouchOverlay_Build(ImGui::GetForegroundDrawList(), overlay);
 	ImGui::Render();

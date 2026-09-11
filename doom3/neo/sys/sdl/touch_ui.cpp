@@ -426,13 +426,14 @@ static void TouchUI_Layout(void) {
 	TouchUI_PlaceButton(TB_MENU, margin, margin, small);
 	TouchUI_PlaceButton(TB_OBJECTIVES, margin + small + gap, margin, small);
 
-	// quick save and quick load side by side in the top centre, capsules as
-	// wide as their words
-	const float saveWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKSAVE), small);
-	const float loadWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKLOAD), small);
+	// quick save and quick load side by side in the top centre, lower than
+	// the other small buttons, capsules as wide as their words
+	const float saveLoadHeight = small * 0.7f;
+	const float saveWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKSAVE), saveLoadHeight);
+	const float loadWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKLOAD), saveLoadHeight);
 
-	TouchUI_PlaceButton(TB_QUICKSAVE, screenWidth * 0.5f - gap * 0.5f - saveWidth, margin, saveWidth, small);
-	TouchUI_PlaceButton(TB_QUICKLOAD, screenWidth * 0.5f + gap * 0.5f, margin, loadWidth, small);
+	TouchUI_PlaceButton(TB_QUICKSAVE, screenWidth * 0.5f - gap * 0.5f - saveWidth, margin, saveWidth, saveLoadHeight);
+	TouchUI_PlaceButton(TB_QUICKLOAD, screenWidth * 0.5f + gap * 0.5f, margin, loadWidth, saveLoadHeight);
 
 	TouchUI_PlaceButton(TB_NEXTWEAPON, screenWidth * 0.5 + small * 1.5, screenHeight - small -margin * 2, small);
 	TouchUI_PlaceButton(TB_PREVWEAPON, screenWidth * 0.5 - small * 0.5, screenHeight - small -margin * 2, small);

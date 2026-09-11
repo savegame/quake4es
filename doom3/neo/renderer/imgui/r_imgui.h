@@ -24,4 +24,7 @@ void ImGui_MouseWheelEvent(float wx, float wy);
 bool ImGui_HandleEvent(const sysEvent_t *ev);
 void R_ImGui_idTech4AmmSettings_f(const idCmdArgs &args);
 
+// Noto Sans Bold, compressed, in renderer/imgui/r_font.cpp
+const unsigned int *R_ImGui_NotoSansBold(unsigned int *size);
+
 #endif

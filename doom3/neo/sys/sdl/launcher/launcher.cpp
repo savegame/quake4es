@@ -47,8 +47,11 @@ Scope:
 #include "backends/imgui_impl_opengl3.h"
 
 /* Font embedded into the package: Noto Sans Bold (Cyrillic), stb-compressed
-   array. Regenerate with binary_to_compressed_c from the TTF if needed. */
-#include "fonts/NotoSansBold.h"
+   array (renderer/imgui/fonts/NotoSansBold.h, regenerate with
+   binary_to_compressed_c from the TTF if needed). The on-screen touch
+   controls write with it too, so it is compiled in once, in
+   renderer/imgui/r_font.cpp, and taken from there. */
+extern const unsigned int *R_ImGui_NotoSansBold( unsigned int *size );
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1001,8 +1004,10 @@ launcher_result_t Launcher_Run( void )
 		0x2010, 0x205E, /* General Punctuation (— „ “ ” …) */
 		0,
 	};
+	unsigned int font_size = 0;
+	const unsigned int *font_data = R_ImGui_NotoSansBold( &font_size );
 	if( io.Fonts->AddFontFromMemoryCompressedTTF(
-		NotoSansBold_compressed_data, NotoSansBold_compressed_size,
+		font_data, (int)font_size,
 		font_px, nullptr, kGlyphRanges ) == nullptr )
 	{
 		/* Fall back to ImGui's built-in font, scaled. */
