@@ -70,16 +70,26 @@ idCVar idSoundSystemLocal::s_reverbFeedback("s_reverbFeedback", "0.333", CVAR_SO
 idCVar idSoundSystemLocal::s_enviroSuitVolumeScale("s_enviroSuitVolumeScale", "0.9", CVAR_SOUND | CVAR_FLOAT, "");
 idCVar idSoundSystemLocal::s_skipHelltimeFX("s_skipHelltimeFX", "0", CVAR_SOUND | CVAR_BOOL, "");
 
+#if defined(_OPENAL) && defined(__linux__) && !defined(__ANDROID__)
+// The legacy mixer writes to the device through ALSA or OSS itself, which a
+// PulseAudio system does not reliably accept (on Aurora OS it fails outright),
+// so on Linux sound goes through OpenAL only
+#define _OPENAL_ONLY
+#endif
+
 #if ID_OPENAL
 // off by default. OpenAL DLL gets loaded on-demand
 #ifdef _WIN32
 idCVar idSoundSystemLocal::s_libOpenAL("s_libOpenAL", "openal32.dll", CVAR_SOUND | CVAR_ARCHIVE, "OpenAL DLL name/path");
 #else
-idCVar idSoundSystemLocal::s_libOpenAL("s_libOpenAL", "./libopenal.so", CVAR_SOUND | CVAR_ARCHIVE, "OpenAL DLL name/path");
+idCVar idSoundSystemLocal::s_libOpenAL("s_libOpenAL", "libopenal.so.1", CVAR_SOUND | CVAR_ARCHIVE, "OpenAL DLL name/path");
 #endif
 #ifdef _WIN32 //karin: enable OpenAL default on Windows
 idCVar idSoundSystemLocal::s_useOpenAL("s_useOpenAL", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use OpenAL");
 idCVar idSoundSystemLocal::s_useEAXReverb("s_useEAXReverb", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use EAX reverb");
+#elif defined(_OPENAL_ONLY)
+idCVar idSoundSystemLocal::s_useOpenAL("s_useOpenAL", "1", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use OpenAL");
+idCVar idSoundSystemLocal::s_useEAXReverb("s_useEAXReverb", "0", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use EAX reverb");
 #else
 idCVar idSoundSystemLocal::s_useOpenAL("s_useOpenAL", "0", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use OpenAL");
 idCVar idSoundSystemLocal::s_useEAXReverb("s_useEAXReverb", "0", CVAR_SOUND | CVAR_BOOL | CVAR_ARCHIVE, "use EAX reverb");
@@ -513,6 +523,14 @@ void idSoundSystemLocal::Init()
 #endif
 
 #ifdef _OPENAL
+#ifdef _OPENAL_ONLY
+	// configs written by older builds turn OpenAL off and name a library in
+	// the working directory, which is not there
+	idSoundSystemLocal::s_useOpenAL.SetBool(true);
+	if (!idStr::Cmp(idSoundSystemLocal::s_libOpenAL.GetString(), "./libopenal.so")) {
+		idSoundSystemLocal::s_libOpenAL.SetString("libopenal.so.1");
+	}
+#endif
 	if (idSoundSystemLocal::s_useOpenAL.GetBool() || idSoundSystemLocal::s_useEAXReverb.GetBool()) {
 		// default all true
 #ifdef _OPENAL_SOFT
@@ -819,6 +837,14 @@ bool idSoundSystemLocal::InitHW()
 	if (s_noSound.GetBool()) {
 		return false;
 	}
+
+#ifdef _OPENAL_ONLY
+	// no falling back to the legacy output
+	if (!useOpenAL) {
+		common->Warning("OpenAL failed to initialize, sound is disabled");
+		return false;
+	}
+#endif
 
 	delete snd_audio_hw;
 	snd_audio_hw = idAudioHardware::Alloc();

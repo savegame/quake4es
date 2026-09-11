@@ -420,7 +420,7 @@ bool Sys_LoadOpenAL(void)
 
 	hOpenAL = dlopen( path, RTLD_NOW | RTLD_GLOBAL );
 	if ( !hOpenAL ) {
-		common->Warning( "LoadLibrary %s failed.", path );
+		common->Warning( "LoadLibrary %s failed: %s", path, dlerror() );
 		return false;
 	}
 	if ( ( sym = InitializeIDAL( hOpenAL ) ) ) {

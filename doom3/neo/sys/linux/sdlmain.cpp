@@ -1049,6 +1049,13 @@ int main(int argc, char **argv) {
 	// so set $LC_ALL to "C".
 	setenv("LC_ALL", "C", 1);
 
+#ifdef _AURORA
+	/* The Aurora OS audio policy routes a PulseAudio stream only by its role,
+	   and one without it stays silent. OpenAL reads this when it connects, so
+	   it has to be in the environment before the sound system comes up. */
+	setenv("PULSE_PROP_media.role", "x-maemo", 1);
+#endif
+
 	Posix_InitSignalHandlers();
 
 #ifdef _AURORA_LAUNCHER
