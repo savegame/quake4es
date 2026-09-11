@@ -904,6 +904,22 @@ void GLimp_GrabInput(int flags) {
 #endif
 }
 
+/*
+===================
+GLimp_GetDisplayIndex
+
+The display the window is on, -1 while there is no window
+===================
+*/
+int GLimp_GetDisplayIndex(void) {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    if (window) {
+        return SDL_GetWindowDisplayIndex(window);
+    }
+#endif
+    return -1;
+}
+
 void GLimp_EnableLogging(bool enable) { }
 
 bool GLimp_CheckGLInitialized(void) {

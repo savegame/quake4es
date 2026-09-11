@@ -1878,6 +1878,7 @@ elseif(WIN32)
 			sys/sys_local.cpp
 			sys/sdl/threads.cpp
 			sys/sdl/events.cpp
+			sys/sdl/touch_ui.cpp
 			sys/sdl/cpu.cpp
 			sys/sdl/sdl.cpp
 			)
@@ -1909,6 +1910,7 @@ else()
 			sys/sys_local.cpp
 			sys/sdl/threads.cpp
 			sys/sdl/events.cpp
+			sys/sdl/touch_ui.cpp
 			sys/sdl/cpu.cpp
 			sys/sdl/sdl.cpp
 			sys/linux/stack.cpp

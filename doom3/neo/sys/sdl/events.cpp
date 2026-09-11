@@ -39,6 +39,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "renderer/tr_local.h"
 
 #include "sys/sys_public.h"
+#include "sys/sdl/touch_ui.h"
 
 #if !SDL_VERSION_ATLEAST(2, 0, 0)
 #define SDL_Keycode SDLKey
@@ -1132,10 +1133,10 @@ static void PadFrame(void) {
 
 /*
 =================
-Sys_GetJoystickAxis
+PadJoystickAxis
 =================
 */
-float Sys_GetJoystickAxis(int axis) {
+static float PadJoystickAxis(int axis) {
 	float x, y;
 
 	if (pad_menu || !pad_controllers.Num()) {
@@ -1170,7 +1171,7 @@ bool Sys_GamepadActive(void) {
 	return pad_controllers.Num() > 0;
 }
 #else
-float Sys_GetJoystickAxis(int axis) {
+static float PadJoystickAxis(int axis) {
 	return 0.0f;
 }
 
@@ -1178,6 +1179,39 @@ bool Sys_GamepadActive(void) {
 	return false;
 }
 #endif
+
+/*
+=================
+Sys_GetJoystickAxis
+
+The game controller and the stick of the touch controls add up; the usercmd
+generator keeps the sum within the range of a move
+=================
+*/
+float Sys_GetJoystickAxis(int axis) {
+	return PadJoystickAxis(axis) + TouchUI_JoystickAxis(axis);
+}
+
+/*
+=================
+Sys_QueueMouseMove
+
+The touch camera pad moves the view the way the mouse does
+=================
+*/
+void Sys_QueueMouseMove(int dx, int dy) {
+	mouse_polls.Append(mouse_poll_t(M_DELTAX, dx));
+	mouse_polls.Append(mouse_poll_t(M_DELTAY, dy));
+}
+
+/*
+=================
+Sys_QueueUsercmdAction
+=================
+*/
+void Sys_QueueUsercmdAction(int action, bool down) {
+	action_polls.Append(action_poll_t(action, down));
+}
 
 /*
 =================
@@ -1225,6 +1259,8 @@ void Sys_InitInput() {
 	// after the mappings: a controller only becomes one with its mapping
 	PadOpenAll();
 #endif
+
+	TouchUI_Init();
 }
 
 /*
@@ -1233,6 +1269,8 @@ Sys_ShutdownInput
 =================
 */
 void Sys_ShutdownInput() {
+	TouchUI_Shutdown();
+
 	kbd_polls.Clear();
 	mouse_polls.Clear();
 	action_polls.Clear();
@@ -1423,6 +1461,11 @@ sysEvent_t Sys_GetEvent() {
 	}
 #endif
 
+	// and so can a finger
+	if (TouchUI_NextEvent(res)) {
+		return res;
+	}
+
 	// loop until there is an event we care about (will return then) or no more events
 	while(SDL_PollEvent(&ev)) {
 #ifdef _AURORA_FBO
@@ -1433,6 +1476,19 @@ sysEvent_t Sys_GetEvent() {
 		// the compositor speaks in display coordinates, the engine in those of
 		// the framebuffer
 		Aurora_TransformInputEvent(&ev);
+#endif
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		// the touchscreen is the touch code's, not a mouse SDL may make of it
+		if ((ev.type == SDL_MOUSEMOTION && ev.motion.which == SDL_TOUCH_MOUSEID) ||
+			((ev.type == SDL_MOUSEBUTTONDOWN || ev.type == SDL_MOUSEBUTTONUP) && ev.button.which == SDL_TOUCH_MOUSEID) ||
+			(ev.type == SDL_MOUSEWHEEL && ev.wheel.which == SDL_TOUCH_MOUSEID)) {
+			continue; // handle next event
+		}
+
+		if (ev.type == SDL_MOUSEMOTION || ev.type == SDL_MOUSEBUTTONDOWN || ev.type == SDL_MOUSEWHEEL) {
+			TouchUI_OtherInput();
+		}
 #endif
 
 		switch (ev.type) {
@@ -1460,6 +1516,9 @@ sysEvent_t Sys_GetEvent() {
 					break;
 				case SDL_WINDOWEVENT_FOCUS_LOST:
 					in_hasFocus = false;
+
+					// the fingers on the screen won't be seen being lifted
+					TouchUI_Reset();
 					break;
 
                 // win_xpos and win_ypos declared on glimp.cpp
@@ -1575,6 +1634,10 @@ sysEvent_t Sys_GetEvent() {
 			}
 		}
 #endif
+
+			if (ev.type == SDL_KEYDOWN) {
+				TouchUI_OtherInput();
+			}
 
 			res.evType = SE_KEY;
 			res.evValue = key;
@@ -1768,6 +1831,16 @@ sysEvent_t Sys_GetEvent() {
 			}
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
+		case SDL_FINGERDOWN:
+		case SDL_FINGERMOTION:
+		case SDL_FINGERUP:
+			TouchUI_FingerEvent(&ev);
+
+			if (TouchUI_NextEvent(res)) {
+				return res;
+			}
+			continue; // handle next event
+
 		case SDL_CONTROLLERDEVICEADDED:
 			PadOpen(ev.cdevice.which); // a device index here
 			continue; // handle next event
@@ -1830,6 +1903,9 @@ void Sys_ClearEvents() {
 	kbd_polls.SetNum(0, false);
 	mouse_polls.SetNum(0, false);
 	action_polls.SetNum(0, false);
+
+	// fingers lifted meanwhile went with the rest
+	TouchUI_Reset();
 }
 
 static void handleMouseGrab() {
@@ -1906,6 +1982,8 @@ void Sys_GenerateEvents() {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	PadFrame();
 #endif
+
+	TouchUI_Frame();
 
 	char *s = Sys_ConsoleInput();
 
