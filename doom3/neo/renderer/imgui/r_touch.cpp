@@ -158,9 +158,28 @@ static void RB_TouchLetter(ImDrawList *list, char letter, const ImVec2 &origin, 
 	static const float letterP[][2] = {
 		{ 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.75f, 0.0f }, { 1.0f, 0.18f }, { 1.0f, 0.37f }, { 0.75f, 0.55f }, { 0.0f, 0.55f }
 	};
+	static const float letterA[][2] = {
+		{ 0.0f, 1.0f }, { 0.5f, 0.0f }, { 1.0f, 1.0f }
+	};
+	static const float letterV[][2] = {
+		{ 0.0f, 0.0f }, { 0.5f, 1.0f }, { 1.0f, 0.0f }
+	};
+	static const float letterE[][2] = {
+		{ 1.0f, 0.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }
+	};
+	static const float letterL[][2] = {
+		{ 0.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f }
+	};
+	static const float letterO[][2] = {
+		{ 0.3f, 0.0f }, { 0.7f, 0.0f }, { 1.0f, 0.25f }, { 1.0f, 0.75f }, { 0.7f, 1.0f }, { 0.3f, 1.0f }, { 0.0f, 0.75f }, { 0.0f, 0.25f }
+	};
+	static const float letterD[][2] = {
+		{ 0.0f, 0.0f }, { 0.6f, 0.0f }, { 1.0f, 0.3f }, { 1.0f, 0.7f }, { 0.6f, 1.0f }, { 0.0f, 1.0f }
+	};
 
 	const float (*points)[2] = NULL;
 	int numPoints = 0;
+	ImDrawFlags flags = ImDrawFlags_None;
 
 	switch (letter) {
 		case 'S':
@@ -171,6 +190,40 @@ static void RB_TouchLetter(ImDrawList *list, char letter, const ImVec2 &origin, 
 		case 'P':
 			points = letterP;
 			numPoints = sizeof(letterP) / sizeof(letterP[0]);
+			break;
+
+		case 'A':
+			points = letterA;
+			numPoints = sizeof(letterA) / sizeof(letterA[0]);
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.22f, 0.6f), RB_TouchLetterPoint(origin, width, height, 0.78f, 0.6f), color, thickness);
+			break;
+
+		case 'V':
+			points = letterV;
+			numPoints = sizeof(letterV) / sizeof(letterV[0]);
+			break;
+
+		case 'E':
+			points = letterE;
+			numPoints = sizeof(letterE) / sizeof(letterE[0]);
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.5f), RB_TouchLetterPoint(origin, width, height, 0.8f, 0.5f), color, thickness);
+			break;
+
+		case 'L':
+			points = letterL;
+			numPoints = sizeof(letterL) / sizeof(letterL[0]);
+			break;
+
+		case 'O':
+			points = letterO;
+			numPoints = sizeof(letterO) / sizeof(letterO[0]);
+			flags = ImDrawFlags_Closed;
+			break;
+
+		case 'D':
+			points = letterD;
+			numPoints = sizeof(letterD) / sizeof(letterD[0]);
+			flags = ImDrawFlags_Closed;
 			break;
 
 		case 'K':
@@ -193,7 +246,7 @@ static void RB_TouchLetter(ImDrawList *list, char letter, const ImVec2 &origin, 
 		path[i] = RB_TouchLetterPoint(origin, width, height, points[i][0], points[i][1]);
 	}
 
-	list->AddPolyline(path, numPoints, color, ImDrawFlags_None, thickness);
+	list->AddPolyline(path, numPoints, color, flags, thickness);
 }
 
 /*
@@ -205,17 +258,11 @@ A word in stroked capitals, centred on c
 */
 static void RB_TouchText(ImDrawList *list, const char *text, const ImVec2 &c, float height, ImU32 color, float thickness)
 {
-	const float letterWidth = height * 0.62f;
-	const float gap = height * 0.3f;
+	const float letterWidth = TOUCH_LETTER_WIDTH * height;
+	const float gap = TOUCH_LETTER_GAP * height;
 	const int length = idStr::Length(text);
 
-	float width = gap * (length - 1);
-
-	for (int i = 0; i < length; i++) {
-		width += (text[i] == 'I') ? 0.0f : letterWidth;
-	}
-
-	float x = c.x - width * 0.5f;
+	float x = c.x - TouchOverlay_TextWidth(text, height) * 0.5f;
 	const float y = c.y - height * 0.5f;
 
 	for (int i = 0; i < length; i++) {
@@ -333,10 +380,9 @@ static void RB_TouchIcon(ImDrawList *list, touchIcon_t icon, const ImVec2 &c, fl
 			break;
 		}
 
-		case TOUCH_ICON_SKIP: {
-			RB_TouchText(list, "SKIP", c, s * 1.2f, color, thickness * 0.75f);
+		default:
+			// the words, drawn on capsules by RB_TouchOverlay_Build()
 			break;
-		}
 	}
 }
 
@@ -354,17 +400,28 @@ static void RB_TouchOverlay_Build(ImDrawList *list, const touchOverlay_t *overla
 	for (int i = 0; i < overlay->numButtons; i++) {
 		const touchOverlayButton_t &button = overlay->buttons[i];
 		const ImVec2 c(button.x + button.w * 0.5f, button.y + button.h * 0.5f);
-		const float r = Min(button.w, button.h) * 0.5f - ring * 0.5f;
+		const ImU32 fill = button.pressed ? RB_TouchColor(TOUCH_ACCENT_R, TOUCH_ACCENT_G, TOUCH_ACCENT_B, alpha * 0.8f) : RB_TouchColor(0, 0, 0, alpha * 0.4f);
+		const ImU32 edge = button.pressed ? RB_TouchColor(255, 255, 255, alpha) : RB_TouchColor(255, 255, 255, alpha * 0.7f);
+		const ImU32 content = RB_TouchColor(255, 255, 255, alpha * 0.95f);
+		const char *text = TouchOverlay_IconText(button.icon);
 
-		if (button.pressed) {
-			list->AddCircleFilled(c, r, RB_TouchColor(TOUCH_ACCENT_R, TOUCH_ACCENT_G, TOUCH_ACCENT_B, alpha * 0.8f));
-			list->AddCircle(c, r, RB_TouchColor(255, 255, 255, alpha), 0, ring);
-		} else {
-			list->AddCircleFilled(c, r, RB_TouchColor(0, 0, 0, alpha * 0.4f));
-			list->AddCircle(c, r, RB_TouchColor(255, 255, 255, alpha * 0.7f), 0, ring);
+		if (text) {
+			// a capsule filling the rectangle, its ring inside it like a circle's
+			const ImVec2 min(button.x + ring * 0.5f, button.y + ring * 0.5f);
+			const ImVec2 max(button.x + button.w - ring * 0.5f, button.y + button.h - ring * 0.5f);
+			const float rounding = (max.y - min.y) * 0.5f;
+
+			list->AddRectFilled(min, max, fill, rounding);
+			list->AddRect(min, max, edge, rounding, ImDrawFlags_None, ring);
+			RB_TouchText(list, text, c, TOUCH_TEXT_HEIGHT * button.h, content, stroke * 0.75f);
+			continue;
 		}
 
-		RB_TouchIcon(list, button.icon, c, r * 0.5f, RB_TouchColor(255, 255, 255, alpha * 0.95f), stroke);
+		const float r = Min(button.w, button.h) * 0.5f - ring * 0.5f;
+
+		list->AddCircleFilled(c, r, fill);
+		list->AddCircle(c, r, edge, 0, ring);
+		RB_TouchIcon(list, button.icon, c, r * 0.5f, content, stroke);
 	}
 
 	if (overlay->stick) {

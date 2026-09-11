@@ -27,7 +27,9 @@ typedef enum {
 	TOUCH_ICON_NEXTWEAPON,
 	TOUCH_ICON_FLASHLIGHT,
 	TOUCH_ICON_OBJECTIVES,
-	TOUCH_ICON_SKIP // the menu button while a cinematic plays
+	TOUCH_ICON_SKIP, // the menu button while a cinematic plays
+	TOUCH_ICON_QUICKSAVE,
+	TOUCH_ICON_QUICKLOAD
 } touchIcon_t;
 
 typedef struct {
@@ -37,6 +39,53 @@ typedef struct {
 } touchOverlayButton_t;
 
 const int TOUCH_OVERLAY_MAX_BUTTONS = 16;
+
+// A button that shows a word instead of an icon is a capsule as wide as the
+// word needs. The system lays it out and hit-tests it with these, the
+// renderer draws it with them, so the two always agree.
+const float TOUCH_TEXT_HEIGHT	= 0.3f;		// letters, in heights of the button
+const float TOUCH_TEXT_PADDING	= 0.45f;	// at either end, in heights of the button
+const float TOUCH_LETTER_WIDTH	= 0.62f;	// in heights of the letters, I is a bare stroke
+const float TOUCH_LETTER_GAP	= 0.3f;		// in heights of the letters
+
+// the word a button shows, NULL for an icon
+ID_INLINE const char *TouchOverlay_IconText(touchIcon_t icon)
+{
+	switch (icon) {
+		case TOUCH_ICON_SKIP:
+			return "SKIP";
+		case TOUCH_ICON_QUICKSAVE:
+			return "SAVE";
+		case TOUCH_ICON_QUICKLOAD:
+			return "LOAD";
+		default:
+			return NULL;
+	}
+}
+
+// width of a word in the capitals the overlay strokes, letters height high
+ID_INLINE float TouchOverlay_TextWidth(const char *text, float height)
+{
+	float width = 0.0f;
+
+	for (int i = 0; text[i]; i++) {
+		if (i > 0) {
+			width += TOUCH_LETTER_GAP * height;
+		}
+
+		if (text[i] != 'I') {
+			width += TOUCH_LETTER_WIDTH * height;
+		}
+	}
+
+	return width;
+}
+
+// width of the capsule of a word on a button height high
+ID_INLINE float TouchOverlay_CapsuleWidth(const char *text, float height)
+{
+	return TouchOverlay_TextWidth(text, TOUCH_TEXT_HEIGHT * height) + 2.0f * TOUCH_TEXT_PADDING * height;
+}
 
 typedef struct touchOverlay_s {
 	int					width;			// content size the layout was made for

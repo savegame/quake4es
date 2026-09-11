@@ -11,7 +11,10 @@
 	  mouse queue, as a mouse would, so the mouse settings apply to it;
 	- buttons press usercmd actions themselves (Sys_QueueUsercmdAction()),
 	  never keys, so no binding can change what they do. The finger holding
-	  fire, jump, crouch or zoom turns the camera as it slides;
+	  fire, jump, crouch or zoom turns the camera as it slides. Crouch and
+	  zoom are toggles, a tap on and the next one off;
+	- quick save and quick load run the commands of their default keys, in
+	  single player;
 	- the menu button is Escape, which the engine wires in; it stays during
 	  cinematics, which it skips, and reads SKIP then.
 
@@ -85,11 +88,14 @@ typedef enum {
 const int TBF_LOOK		= BIT(0);	// the finger holding it also turns the camera
 const int TBF_LATCH		= BIT(1);	// a tap holds the action down, the next lets go
 const int TBF_CINEMATIC	= BIT(2);	// there during cinematics too
+const int TBF_COMMAND	= BIT(3);	// the command is a console command, run on the tap
+const int TBF_SINGLEPLAYER = BIT(4);	// not there in multiplayer
 
 typedef struct {
-	const char *	command;		// usercmd action, NULL for Escape
+	const char *	command;		// usercmd action, console command with TBF_COMMAND, NULL for Escape
 	touchIcon_t		icon;
 	int				flags;
+	const char *	toggleCvar;		// TBF_LATCH: while set, the game toggles by itself
 
 	int				action;			// what the command is to the usercmd generator
 	float			x, y, w, h;		// pixels of the content
@@ -111,6 +117,8 @@ enum {
 	TB_FIRE,
 	TB_JUMP,
 	TB_CROUCH,
+	TB_QUICKSAVE,
+	TB_QUICKLOAD,
 	TB_COUNT
 };
 
@@ -125,11 +133,14 @@ static touchButton_t touchButtons[TB_COUNT] = {
 #endif
 	{ "_impulse15",		TOUCH_ICON_PREVWEAPON,	0 },
 	{ "_impulse14",		TOUCH_ICON_NEXTWEAPON,	0 },
-	{ "_zoom",			TOUCH_ICON_ZOOM,		TBF_LOOK },
+	{ "_zoom",			TOUCH_ICON_ZOOM,		TBF_LOOK | TBF_LATCH,		"in_toggleZoom" },
 	{ "_impulse13",		TOUCH_ICON_RELOAD,		0 },
 	{ "_attack",		TOUCH_ICON_FIRE,		TBF_LOOK },
 	{ "_moveUp",		TOUCH_ICON_JUMP,		TBF_LOOK },
-	{ "_moveDown",		TOUCH_ICON_CROUCH,		TBF_LOOK | TBF_LATCH }
+	{ "_moveDown",		TOUCH_ICON_CROUCH,		TBF_LOOK | TBF_LATCH,		"in_toggleCrouch" },
+	// what the default config binds to F5 and F9
+	{ "savegame quick",	TOUCH_ICON_QUICKSAVE,	TBF_COMMAND | TBF_SINGLEPLAYER },
+	{ "loadgame quick",	TOUCH_ICON_QUICKLOAD,	TBF_COMMAND | TBF_SINGLEPLAYER }
 };
 
 static struct {
@@ -224,6 +235,10 @@ TouchUI_ButtonShown
 =================
 */
 static bool TouchUI_ButtonShown(const touchButton_t &button, touchContext_t context) {
+	if ((button.flags & TBF_SINGLEPLAYER) && sessLocal.IsMultiplayer()) {
+		return false;
+	}
+
 	if (context == TOUCH_GAME) {
 		return true;
 	}
@@ -233,6 +248,39 @@ static bool TouchUI_ButtonShown(const touchButton_t &button, touchContext_t cont
 	}
 
 	return false;
+}
+
+/*
+=================
+TouchUI_ButtonIcon
+
+In a cinematic the menu button is what skips it, and says so
+=================
+*/
+static touchIcon_t TouchUI_ButtonIcon(int index, touchContext_t context) {
+	if (index == TB_MENU && context == TOUCH_CINEMATIC) {
+		return TOUCH_ICON_SKIP;
+	}
+
+	return touchButtons[index].icon;
+}
+
+/*
+=================
+TouchUI_ButtonRect
+
+Where a button is drawn and touched. One that shows a word is a capsule as
+wide as the word needs, from the left edge of its place.
+=================
+*/
+static void TouchUI_ButtonRect(int index, touchContext_t context, float &x, float &y, float &w, float &h) {
+	const touchButton_t &button = touchButtons[index];
+	const char *text = TouchOverlay_IconText(TouchUI_ButtonIcon(index, context));
+
+	x = button.x;
+	y = button.y;
+	w = text ? TouchOverlay_CapsuleWidth(text, button.h) : button.w;
+	h = button.h;
 }
 
 /*
@@ -378,6 +426,14 @@ static void TouchUI_Layout(void) {
 	TouchUI_PlaceButton(TB_MENU, margin, margin, small);
 	TouchUI_PlaceButton(TB_OBJECTIVES, margin + small + gap, margin, small);
 
+	// quick save and quick load side by side in the top centre, capsules as
+	// wide as their words
+	const float saveWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKSAVE), small);
+	const float loadWidth = TouchOverlay_CapsuleWidth(TouchOverlay_IconText(TOUCH_ICON_QUICKLOAD), small);
+
+	TouchUI_PlaceButton(TB_QUICKSAVE, screenWidth * 0.5f - gap * 0.5f - saveWidth, margin, saveWidth, small);
+	TouchUI_PlaceButton(TB_QUICKLOAD, screenWidth * 0.5f + gap * 0.5f, margin, loadWidth, small);
+
 	TouchUI_PlaceButton(TB_NEXTWEAPON, screenWidth * 0.5 + small * 1.5, screenHeight - small -margin * 2, small);
 	TouchUI_PlaceButton(TB_PREVWEAPON, screenWidth * 0.5 - small * 0.5, screenHeight - small -margin * 2, small);
 	TouchUI_PlaceButton(TB_FLASHLIGHT, right - small - margin, margin, small);
@@ -463,9 +519,14 @@ static void TouchUI_Press(touchButton_t &button, SDL_FingerID finger, float x, f
 		return;
 	}
 
-	// crouch stays down until tapped again, unless the player asked the
-	// game itself to toggle it: then a tap is a press like a key's
-	if ((button.flags & TBF_LATCH) && !cvarSystem->GetCVarBool("in_toggleCrouch")) {
+	if (button.flags & TBF_COMMAND) {
+		cmdSystem->BufferCommandText(CMD_EXEC_APPEND, va("%s\n", button.command));
+		return;
+	}
+
+	// crouch and zoom stay on until tapped again, unless the player asked the
+	// game itself to toggle them: then a tap is a press like a key's
+	if ((button.flags & TBF_LATCH) && !(button.toggleCvar && cvarSystem->GetCVarBool(button.toggleCvar))) {
 		if (button.latched) {
 			TouchUI_Unlatch(button);
 		} else {
@@ -726,7 +787,10 @@ static void TouchUI_FingerDown(SDL_FingerID finger, float x, float y, touchConte
 			continue;
 		}
 
-		if (x >= button.x && x < button.x + button.w && y >= button.y && y < button.y + button.h) {
+		float bx, by, bw, bh;
+		TouchUI_ButtonRect(i, context, bx, by, bw, bh);
+
+		if (x >= bx && x < bx + bw && y >= by && y < by + bh) {
 			// another finger holding it keeps it
 			if (!button.held) {
 				TouchUI_Press(button, finger, x, y);
@@ -902,17 +966,9 @@ static bool TouchUI_Overlay(touchOverlay_t *overlay) {
 		}
 
 		touchOverlayButton_t &drawn = overlay->buttons[overlay->numButtons++];
-		drawn.x = button.x;
-		drawn.y = button.y;
-		drawn.w = button.w;
-		drawn.h = button.h;
-		drawn.icon = button.icon;
+		TouchUI_ButtonRect(i, context, drawn.x, drawn.y, drawn.w, drawn.h);
+		drawn.icon = TouchUI_ButtonIcon(i, context);
 		drawn.pressed = button.held || button.latched;
-
-		// in a cinematic the menu button is what skips it, and says so
-		if (i == TB_MENU && context == TOUCH_CINEMATIC) {
-			drawn.icon = TOUCH_ICON_SKIP;
-		}
 	}
 
 	overlay->stick = touchStick.held && context == TOUCH_GAME;
@@ -1024,7 +1080,7 @@ void TouchUI_Init(void) {
 
 	for (int i = 0; i < TB_COUNT; i++) {
 		touchButton_t &button = touchButtons[i];
-		button.action = button.command ? usercmdGen->CommandStringUsercmdData(button.command) : 0;
+		button.action = (button.command && !(button.flags & TBF_COMMAND)) ? usercmdGen->CommandStringUsercmdData(button.command) : 0;
 	}
 
 	// laid out anew for whatever screen there is now
