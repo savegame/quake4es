@@ -13,7 +13,7 @@
 	  never keys, so no binding can change what they do. The finger holding
 	  fire, jump, crouch or zoom turns the camera as it slides;
 	- the menu button is Escape, which the engine wires in; it stays during
-	  cinematics, which it skips.
+	  cinematics, which it skips, and reads SKIP then.
 
 	Every finger is told apart by its SDL id: the stick, the camera pad and
 	each button keep the finger that took them until it is lifted, so they
@@ -26,8 +26,8 @@
 	In the menus and the ImGui settings one finger works the cursor like a
 	trackpad: it moves the cursor by its own movement, and a tap, a touch
 	that hardly moved, clicks where the cursor is. A drag never clicks.
-	What there is only to watch, a cinematic or the intro videos of the main
-	menu, a tap anywhere skips, whether the controls are on or not.
+	The intro videos the main menu plays at start have nothing to click: a
+	tap anywhere skips them, whether the controls are on or not.
 
 	Positions are in pixels of the content: the screen the way the viewer
 	sees it. SDL reports fingers in 0..1 of the window, which on Aurora OS
@@ -663,8 +663,8 @@ A tap clicks where the cursor is, a drag doesn't. Only key events: in the
 menus the mouse button must not reach the usercmd generator, or resuming the
 game with a tap would fire.
 
-What there is only to watch, a cinematic or the intro videos, a tap skips
-with Escape, the way the engine skips them.
+The intro videos have nothing to click, a tap skips them with Escape, the
+way the main menu skips them.
 =================
 */
 static void TouchUI_PointerUp(touchContext_t context) {
@@ -674,7 +674,7 @@ static void TouchUI_PointerUp(touchContext_t context) {
 		return;
 	}
 
-	if (context == TOUCH_CINEMATIC || (context == TOUCH_MENU && TouchUI_MenuPlaysIntro())) {
+	if (context == TOUCH_MENU && TouchUI_MenuPlaysIntro()) {
 		TouchUI_Key(K_ESCAPE, true);
 		TouchUI_Key(K_ESCAPE, false);
 	} else if (context == TOUCH_MENU || context == TOUCH_IMGUI) {
@@ -714,12 +714,12 @@ static void TouchUI_FingerDown(SDL_FingerID finger, float x, float y, touchConte
 		return;
 	}
 
-	if (context != TOUCH_GAME && context != TOUCH_CINEMATIC) {
+	if (!TouchUI_Enabled() || (context != TOUCH_GAME && context != TOUCH_CINEMATIC)) {
 		return;
 	}
 
 	// the buttons come before the stick and the camera
-	for (int i = 0; TouchUI_Enabled() && i < TB_COUNT; i++) {
+	for (int i = 0; i < TB_COUNT; i++) {
 		touchButton_t &button = touchButtons[i];
 
 		if (!TouchUI_ButtonShown(button, context)) {
@@ -735,13 +735,7 @@ static void TouchUI_FingerDown(SDL_FingerID finger, float x, float y, touchConte
 		}
 	}
 
-	// a tap anywhere else skips a cinematic, with the controls or without
-	if (context == TOUCH_CINEMATIC) {
-		TouchUI_PointerDown(finger, x, y);
-		return;
-	}
-
-	if (!TouchUI_Enabled()) {
+	if (context != TOUCH_GAME) {
 		return;
 	}
 
@@ -914,6 +908,11 @@ static bool TouchUI_Overlay(touchOverlay_t *overlay) {
 		drawn.h = button.h;
 		drawn.icon = button.icon;
 		drawn.pressed = button.held || button.latched;
+
+		// in a cinematic the menu button is what skips it, and says so
+		if (i == TB_MENU && context == TOUCH_CINEMATIC) {
+			drawn.icon = TOUCH_ICON_SKIP;
+		}
 	}
 
 	overlay->stick = touchStick.held && context == TOUCH_GAME;

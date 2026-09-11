@@ -26,11 +26,12 @@ typedef enum {
 	TOUCH_ICON_PREVWEAPON,
 	TOUCH_ICON_NEXTWEAPON,
 	TOUCH_ICON_FLASHLIGHT,
-	TOUCH_ICON_OBJECTIVES
+	TOUCH_ICON_OBJECTIVES,
+	TOUCH_ICON_SKIP // the menu button while a cinematic plays
 } touchIcon_t;
 
 typedef struct {
-	float				x, y, w, h;		// the very rectangle touches are tested against
+	float				x, y, w, h; // the very rectangle touches are tested against
 	touchIcon_t			icon;
 	bool				pressed;
 } touchOverlayButton_t;

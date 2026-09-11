@@ -133,6 +133,101 @@ static void RB_TouchArrowHead(ImDrawList *list, const ImVec2 &tip, const ImVec2 
 
 /*
 ====================
+RB_TouchLetterPoint
+====================
+*/
+static ImVec2 RB_TouchLetterPoint(const ImVec2 &origin, float width, float height, float x, float y)
+{
+	return ImVec2(origin.x + x * width, origin.y + y * height);
+}
+
+/*
+====================
+RB_TouchLetter
+
+A capital drawn with strokes like the icons, in a box with its top left
+corner at origin; only the letters the controls spell
+====================
+*/
+static void RB_TouchLetter(ImDrawList *list, char letter, const ImVec2 &origin, float width, float height, ImU32 color, float thickness)
+{
+	static const float letterS[][2] = {
+		{ 1.0f, 0.15f }, { 0.8f, 0.0f }, { 0.2f, 0.0f }, { 0.0f, 0.2f }, { 0.0f, 0.35f }, { 0.2f, 0.5f },
+		{ 0.8f, 0.5f }, { 1.0f, 0.65f }, { 1.0f, 0.8f }, { 0.8f, 1.0f }, { 0.2f, 1.0f }, { 0.0f, 0.85f }
+	};
+	static const float letterP[][2] = {
+		{ 0.0f, 1.0f }, { 0.0f, 0.0f }, { 0.75f, 0.0f }, { 1.0f, 0.18f }, { 1.0f, 0.37f }, { 0.75f, 0.55f }, { 0.0f, 0.55f }
+	};
+
+	const float (*points)[2] = NULL;
+	int numPoints = 0;
+
+	switch (letter) {
+		case 'S':
+			points = letterS;
+			numPoints = sizeof(letterS) / sizeof(letterS[0]);
+			break;
+
+		case 'P':
+			points = letterP;
+			numPoints = sizeof(letterP) / sizeof(letterP[0]);
+			break;
+
+		case 'K':
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 1.0f), color, thickness);
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 1.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 0.6f), color, thickness);
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.32f, 0.42f), RB_TouchLetterPoint(origin, width, height, 1.0f, 1.0f), color, thickness);
+			return;
+
+		case 'I':
+			list->AddLine(RB_TouchLetterPoint(origin, width, height, 0.0f, 0.0f), RB_TouchLetterPoint(origin, width, height, 0.0f, 1.0f), color, thickness);
+			return;
+
+		default:
+			return;
+	}
+
+	ImVec2 path[12];
+
+	for (int i = 0; i < numPoints; i++) {
+		path[i] = RB_TouchLetterPoint(origin, width, height, points[i][0], points[i][1]);
+	}
+
+	list->AddPolyline(path, numPoints, color, ImDrawFlags_None, thickness);
+}
+
+/*
+====================
+RB_TouchText
+
+A word in stroked capitals, centred on c
+====================
+*/
+static void RB_TouchText(ImDrawList *list, const char *text, const ImVec2 &c, float height, ImU32 color, float thickness)
+{
+	const float letterWidth = height * 0.62f;
+	const float gap = height * 0.3f;
+	const int length = idStr::Length(text);
+
+	float width = gap * (length - 1);
+
+	for (int i = 0; i < length; i++) {
+		width += (text[i] == 'I') ? 0.0f : letterWidth;
+	}
+
+	float x = c.x - width * 0.5f;
+	const float y = c.y - height * 0.5f;
+
+	for (int i = 0; i < length; i++) {
+		const float w = (text[i] == 'I') ? 0.0f : letterWidth;
+
+		RB_TouchLetter(list, text[i], ImVec2(x, y), w, height, color, thickness);
+		x += w + gap;
+	}
+}
+
+/*
+====================
 RB_TouchIcon
 
 The icon of a button around its centre c, s is half the size of the icon
@@ -235,6 +330,11 @@ static void RB_TouchIcon(ImDrawList *list, touchIcon_t icon, const ImVec2 &c, fl
 				list->AddCircleFilled(ImVec2(c.x - s * 0.7f, y), thickness * 0.8f, color);
 				list->AddLine(ImVec2(c.x - s * 0.35f, y), ImVec2(c.x + s * 0.85f, y), color, thickness);
 			}
+			break;
+		}
+
+		case TOUCH_ICON_SKIP: {
+			RB_TouchText(list, "SKIP", c, s * 1.2f, color, thickness * 0.75f);
 			break;
 		}
 	}
