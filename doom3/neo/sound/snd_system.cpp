@@ -1488,6 +1488,15 @@ idSoundSystemLocal::SetMute
 void idSoundSystemLocal::SetMute(bool muteOn)
 {
 	muted = muteOn;
+
+#ifdef _OPENAL
+	// a muted sound world is not mixed at all, so the sources that OpenAL keeps
+	// playing by itself would be heard right through the mute: the listener is
+	// turned down instead. MixLoop turns it back up when the mixing resumes
+	if (useOpenAL && openalContext) {
+		alListenerf(AL_GAIN, muteOn ? 0.0f : 1.0f);
+	}
+#endif
 }
 
 /*

@@ -95,6 +95,10 @@ static idCVar in_grabKeyboard("in_grabKeyboard", "0", CVAR_SYSTEM | CVAR_ARCHIVE
 static bool in_relativeMouseMode = true;
 // set in Sys_GetEvent() on window focus gained/lost events
 static bool in_hasFocus = true;
+// set in Sys_GetEvent() on window minimize/restore and on the application
+// going to the background. Wayland only tells about the focus when the window
+// goes away, so the game watches both
+static bool in_windowHidden = false;
 
 struct kbd_poll_t {
 	int key;
@@ -1188,6 +1192,32 @@ bool Sys_GamepadActive(void) {
 
 /*
 =================
+Sys_WindowHidden
+
+The window was minimized or the application was put into the background:
+whatever the fingers held on the screen is let go, the same way losing the
+focus does it
+=================
+*/
+static void Sys_WindowHidden(bool hidden) {
+	in_windowHidden = hidden;
+
+	if (hidden) {
+		TouchUI_Reset();
+	}
+}
+
+/*
+=================
+Sys_IsWindowActive
+=================
+*/
+bool Sys_IsWindowActive(void) {
+	return in_hasFocus && !in_windowHidden;
+}
+
+/*
+=================
 Sys_GetJoystickAxis
 
 The game controller and the stick of the touch controls add up; the usercmd
@@ -1543,14 +1573,24 @@ sysEvent_t Sys_GetEvent() {
 #endif
 					break;
 
-#ifdef _AURORA
 				case SDL_WINDOWEVENT_MINIMIZED:
+				case SDL_WINDOWEVENT_HIDDEN:
+					Sys_WindowHidden(true);
+
+#ifdef _AURORA
+					// the display blanks as usual with no window to look at
 					mce_keepalive_set_prevent_blanking(false);
-					break;
-				case SDL_WINDOWEVENT_RESTORED:
-					mce_keepalive_set_prevent_blanking(in_hasFocus);
-					break;
 #endif
+					break;
+
+				case SDL_WINDOWEVENT_RESTORED:
+				case SDL_WINDOWEVENT_SHOWN:
+					Sys_WindowHidden(false);
+
+#ifdef _AURORA
+					mce_keepalive_set_prevent_blanking(in_hasFocus);
+#endif
+					break;
 
                 // win_xpos and win_ypos declared on glimp.cpp
                 case SDL_WINDOWEVENT_MOVED:
@@ -1912,14 +1952,22 @@ sysEvent_t Sys_GetEvent() {
 			continue; // handle next event
 #endif
 
-#ifdef _AURORA
+#if SDL_VERSION_ATLEAST(2, 0, 0)
 		// where SDL tells when the application goes to the background
 		case SDL_APP_WILLENTERBACKGROUND:
+			Sys_WindowHidden(true);
+
+#ifdef _AURORA
 			mce_keepalive_set_prevent_blanking(false);
+#endif
 			continue; // handle next event
 
 		case SDL_APP_DIDENTERFOREGROUND:
+			Sys_WindowHidden(false);
+
+#ifdef _AURORA
 			mce_keepalive_set_prevent_blanking(in_hasFocus);
+#endif
 			continue; // handle next event
 #endif
 

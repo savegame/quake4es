@@ -76,6 +76,11 @@ bool Sys_GamepadActive(void)
 	return false;
 }
 
+bool Sys_IsWindowActive(void)
+{
+	return true;
+}
+
 int Sys_PollUsercmdActionEvents(void)
 {
 	return 0;

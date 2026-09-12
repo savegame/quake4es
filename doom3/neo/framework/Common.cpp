@@ -49,6 +49,9 @@ static stringDataAllocator_t globalStringDataAllocator;
 static wideStringDataAllocator_t globalWideStringDataAllocator;
 #endif
 
+// sessLocal, to tell a game that is already paused in a menu from a running one
+#include "framework/Session_local.h"
+
 #define	MAX_PRINT_MSG_SIZE	4096
 #define MAX_WARNING_LIST	256
 
@@ -2838,6 +2841,55 @@ void idCommonLocal::InitSIMD(void)
 	com_forceGenericSIMD.ClearModified();
 }
 
+// how long the main loop sleeps between frames while the window is hidden: a
+// paused single player game has nothing left to do, a multiplayer client still
+// has to keep up with the server
+#define COM_HIDDEN_SLEEP_MSEC		100
+#define COM_HIDDEN_SLEEP_MSEC_NET	16
+
+/*
+=================
+Com_WindowActive
+
+Follows the window between the foreground and the background. Losing the focus
+or being minimized lets go of everything that is still held down and pauses a
+single player game in the menu, exactly like pressing Escape does, which stops
+the game tics and the game sound world; the sound is muted on top of that, so
+that the menu is quiet as well. A multiplayer game keeps running on the server,
+so it is only muted.
+
+Coming back only takes the mute off, the player leaves the menu himself.
+
+Returns false while the frame should not be drawn at all.
+=================
+*/
+static bool Com_WindowActive(void)
+{
+	static bool	wasActive = true;
+
+	const bool active = Sys_IsWindowActive();
+
+	if (active == wasActive) {
+		return active;
+	}
+
+	wasActive = active;
+
+	if (!active) {
+		// no key or button may stay pressed across the switch
+		idKeyInput::ClearStates();
+
+		// a menu already has the game paused
+		if (!session->IsMultiplayer() && sessLocal.GetActiveMenu() == NULL) {
+			session->StartMenu();
+		}
+	}
+
+	soundSystem->SetMute(!active);
+
+	return active;
+}
+
 /*
 =================
 idCommonLocal::Frame
@@ -2882,16 +2934,29 @@ void idCommonLocal::Frame(void)
 
 		idAsyncNetwork::RunFrame();
 
+		// nothing is drawn while the window is hidden or behind another one,
+		// only the events and the network keep going
+		const bool windowActive = Com_WindowActive();
+
 		if (idAsyncNetwork::IsActive()) {
 			if (idAsyncNetwork::serverDedicated.GetInteger() != 1) {
 				session->GuiFrameEvents();
-				session->UpdateScreen(false);
+
+				if (windowActive) {
+					session->UpdateScreen(false);
+				}
 			}
-		} else {
+		} else if (windowActive) {
 			session->Frame();
 
 			// normal, in-sequence screen update
 			session->UpdateScreen(false);
+		}
+
+		if (!windowActive) {
+			// nothing waits for the display any more, so the loop would spin as
+			// fast as the CPU can: sleep the frame away instead
+			Sys_Sleep(idAsyncNetwork::IsActive() ? COM_HIDDEN_SLEEP_MSEC_NET : COM_HIDDEN_SLEEP_MSEC);
 		}
 
 		// report timing information

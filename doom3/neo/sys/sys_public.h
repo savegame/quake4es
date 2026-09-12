@@ -571,6 +571,10 @@ float			Sys_GetJoystickAxis(int axis);
 // to get out of the way
 bool			Sys_GamepadActive(void);
 
+// false while the window is minimized, hidden or has no focus: the game
+// pauses, goes quiet and sleeps instead of drawing frames nobody sees
+bool			Sys_IsWindowActive(void);
+
 // usercmd actions pressed by the system itself, with no key in between, so
 // that no binding can change what they do: the on-screen touch controls.
 // action is what idUsercmdGen::CommandStringUsercmdData() returns for the

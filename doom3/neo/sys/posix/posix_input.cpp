@@ -177,6 +177,11 @@ bool Sys_GamepadActive(void)
 	return false;
 }
 
+bool Sys_IsWindowActive(void)
+{
+	return true;
+}
+
 // nor on-screen touch controls
 int Sys_PollUsercmdActionEvents(void)
 {
