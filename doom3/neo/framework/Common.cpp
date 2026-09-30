@@ -3812,6 +3812,19 @@ void idCommonLocal::InitGame(void)
 	// run cfg execution
 	cmdSystem->ExecuteCommandBuffer();
 
+#ifdef _AURORA
+	// com_fixedTic runs a fixed number of game tics per rendered frame instead
+	// of as many as the real time asks for, which ties the speed of the game
+	// to the frame rate: slow motion below 60 fps, fast forward above. The
+	// Linux release of Prey ships an autoexec.cfg that turns it on, and it is
+	// archived from there into the user's config, so it is put back after the
+	// configs. The command line may still set it.
+	if (idSessionLocal::com_fixedTic.GetInteger() != 0) {
+		common->Printf("com_fixedTic %i from the configs ties the game speed to the frame rate, reset to 0\n", idSessionLocal::com_fixedTic.GetInteger());
+		idSessionLocal::com_fixedTic.SetInteger(0);
+	}
+#endif
+
 	// re-override anything from the config files with command line args
 	StartupVariable(NULL, false);
 
