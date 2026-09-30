@@ -30,6 +30,9 @@ typedef enum {
 	TOUCH_ICON_SKIP, // the menu button while a cinematic plays
 	TOUCH_ICON_QUICKSAVE,
 	TOUCH_ICON_QUICKLOAD,
+	TOUCH_ICON_SPIRIT,
+	TOUCH_ICON_ALTFIRE,
+	TOUCH_ICON_GRENADE,
 
 	TOUCH_ICON_COUNT
 } touchIcon_t;
@@ -60,6 +63,12 @@ ID_INLINE const char *TouchOverlay_IconText(touchIcon_t icon)
 			return "SAVE";
 		case TOUCH_ICON_QUICKLOAD:
 			return "LOAD";
+		case TOUCH_ICON_SPIRIT:
+			return "SPIRIT";
+		case TOUCH_ICON_ALTFIRE:
+			return "ALT";
+		case TOUCH_ICON_GRENADE:
+			return "GREN";
 		default:
 			return NULL;
 	}

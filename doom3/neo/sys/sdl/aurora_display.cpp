@@ -8,7 +8,7 @@
 #include <wayland-client.h>
 #endif
 
-// Quake 4 is a landscape game: portrait orientations are mapped onto the
+// The game is a landscape one: portrait orientations are mapped onto the
 // nearest landscape one rather than shown upright.
 //
 // On a portrait panel the buffer transform is therefore always 90 or 270,

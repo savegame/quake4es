@@ -461,12 +461,12 @@ static void RB_TouchOverlay_Build(ImDrawList *list, const touchOverlay_t *overla
 
 		if (text) {
 			// a capsule filling the rectangle, its ring inside it like a circle's
-			const ImVec2 min(button.x + ring * 0.5f, button.y + ring * 0.5f);
-			const ImVec2 max(button.x + button.w - ring * 0.5f, button.y + button.h - ring * 0.5f);
-			const float rounding = (max.y - min.y) * 0.5f;
+			const ImVec2 lo(button.x + ring * 0.5f, button.y + ring * 0.5f);
+			const ImVec2 hi(button.x + button.w - ring * 0.5f, button.y + button.h - ring * 0.5f);
+			const float rounding = (hi.y - lo.y) * 0.5f;
 
-			list->AddRectFilled(min, max, fill, rounding);
-			list->AddRect(min, max, edge, rounding, ImDrawFlags_None, ring);
+			list->AddRectFilled(lo, hi, fill, rounding);
+			list->AddRect(lo, hi, edge, rounding, ImDrawFlags_None, ring);
 			RB_TouchText(list, text, c, button.h, button.w - TOUCH_TEXT_PADDING * button.h, content);
 			continue;
 		}

@@ -84,7 +84,21 @@ extern "C" void GLimp_LoadOpenGLFuncForLauncher( void );
 /* Shown in the header of the launcher and as the window title. The window is
    the one the engine goes on to render into, so the title stays through the
    whole run. */
+#if defined(_HUMANHEAD)
+#define LAUNCHER_TITLE "Prey"
+#elif defined(_RAVEN)
 #define LAUNCHER_TITLE "Quake 4"
+#else
+#define LAUNCHER_TITLE "DOOM 3"
+#endif
+
+/* The directory under the resource root the base game keeps its .pk4
+   archives in (BASE_GAMEDIR of framework/Licensee.h off Android). */
+#if defined(_RAVEN)
+#define LAUNCHER_BASEDIR "q4base"
+#else
+#define LAUNCHER_BASEDIR "base"
+#endif
 
 /* Names of the environment variables the launcher hands its picks over in.
    sys/linux/sdlmain.cpp turns them into the engine's own command line. */
@@ -176,9 +190,10 @@ bool IsDir( const std::string &p )
 	return stat( p.c_str(), &st ) == 0 && S_ISDIR( st.st_mode );
 }
 
-/* Quake 4 keeps its resources in q4base/ as .pk4 archives. Checking for the
-   directory alone is not enough: a Steam install has an empty q4base before
-   the download finishes, so at least one archive has to be there. */
+/* The game keeps its resources in LAUNCHER_BASEDIR/ as .pk4 archives.
+   Checking for the directory alone is not enough: a Steam install has an
+   empty one before the download finishes, so at least one archive has to be
+   there. */
 bool HasArchive( const std::string &dir )
 {
 	DIR *d = opendir( dir.c_str());
@@ -202,7 +217,7 @@ bool HasArchive( const std::string &dir )
 bool ValidateResourceDir( const std::string &dir )
 {
 	if( !IsDir( dir )) return false;
-	return HasArchive( dir + "/q4base" );
+	return HasArchive( dir + "/" LAUNCHER_BASEDIR );
 }
 
 /* Mods/DLC: label on the start button + subdirectory name under the
@@ -212,7 +227,9 @@ bool ValidateResourceDir( const std::string &dir )
      { "Capture Mode",  "ctf"         }, */
 struct ModDef { const char *label; const char *id; };
 static const std::vector<ModDef> kMods = {
+#if defined(_RAVEN)
 	{ "Мультиплеер", "q4mp" },
+#endif
 };
 
 /* A game directory is present if it holds at least one .pk4, the same test
@@ -620,7 +637,7 @@ void DrawTab_Game()
 	const bool can_launch = !g_picker.selected.empty() && g_picker.valid_pick;
 	ImGui::BeginDisabled( !can_launch );
 
-	/* Base game: the single player campaign in q4base. */
+	/* Base game: the single player campaign in LAUNCHER_BASEDIR. */
 	if( ImGui::Button( "Одиночная игра", ImVec2( -1, btn_h )))
 		StartGame( "" );
 
@@ -633,8 +650,10 @@ void DrawTab_Game()
 			StartGame( kMods[i].id );
 		ImGui::EndDisabled();
 	}
+#if defined(_RAVEN)
 	if( !kMods.empty())
 		ImGui::TextDisabled( "Мультиплеер доступен при наличии q4mp в папке ресурсов" );
+#endif
 
 	ImGui::EndDisabled();
 }
@@ -692,7 +711,9 @@ void DrawTab_About()
 	ImGui::Spacing();
 	ImGui::TextWrapped(
 		"Движок: idTech4 (ветка idTech4A++), лицензия GNU GPL v3.\n"
+#if defined(_RAVEN)
 		"Система эффектов BSE восстановлена проектом Quake4BSE.\n"
+#endif
 		"Сторонние компоненты: Dear ImGui, SDL2, OpenAL Soft, zlib, libogg/libvorbis, FreeType.\n"
 		"Исходный код порта: github.com/savegame" );
 	ImGui::Spacing();

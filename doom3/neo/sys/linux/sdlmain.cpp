@@ -1080,7 +1080,7 @@ int main(int argc, char **argv) {
 	Posix_EarlyInit( );
 
 #ifdef _AURORA_LAUNCHER
-	/* Quake 4 is not freely distributable, so its resources cannot ship in the
+	/* The game is not freely distributable, so its resources cannot ship in the
 	   package and the user has to point at a legally installed copy. The
 	   launcher does that, in the very window the engine goes on to render
 	   into: the compositor kills an application whose window disappears even

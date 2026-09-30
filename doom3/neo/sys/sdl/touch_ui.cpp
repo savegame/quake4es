@@ -124,17 +124,29 @@ enum {
 
 static touchButton_t touchButtons[TB_COUNT] = {
 	{ NULL,				TOUCH_ICON_MENU,		TBF_CINEMATIC },
-#ifdef _RAVEN
+#if defined(_RAVEN)
 	{ "_showScores",	TOUCH_ICON_OBJECTIVES,	0 },			// objectives while held
 	{ "_impulse50",		TOUCH_ICON_FLASHLIGHT,	0 },
+#elif defined(_HUMANHEAD)
+	// Prey has neither objectives nor a flashlight: the slots hold the spirit
+	// walk toggle and the lighter
+	{ "_impulse54",		TOUCH_ICON_SPIRIT,		0 },
+	{ "_impulse16",		TOUCH_ICON_FLASHLIGHT,	0 },
 #else
 	{ "_impulse19",		TOUCH_ICON_OBJECTIVES,	0 },			// the PDA
 	{ "_impulse11",		TOUCH_ICON_FLASHLIGHT,	0 },
 #endif
 	{ "_impulse15",		TOUCH_ICON_PREVWEAPON,	0 },
 	{ "_impulse14",		TOUCH_ICON_NEXTWEAPON,	0 },
+#ifdef _HUMANHEAD
+	// no zoom and no reload in Prey: the alternate fire (it zooms the rifle
+	// too) is held like the fire, and the crawler grenade is thrown instead
+	{ "_attackalt",		TOUCH_ICON_ALTFIRE,		TBF_LOOK },
+	{ "_impulse25",		TOUCH_ICON_GRENADE,		0 },
+#else
 	{ "_zoom",			TOUCH_ICON_ZOOM,		TBF_LOOK | TBF_LATCH,		"in_toggleZoom" },
 	{ "_impulse13",		TOUCH_ICON_RELOAD,		0 },
+#endif
 	{ "_attack",		TOUCH_ICON_FIRE,		TBF_LOOK },
 	{ "_moveUp",		TOUCH_ICON_JUMP,		TBF_LOOK },
 	{ "_moveDown",		TOUCH_ICON_CROUCH,		TBF_LOOK | TBF_LATCH,		"in_toggleCrouch" },
