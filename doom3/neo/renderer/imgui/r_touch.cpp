@@ -345,7 +345,8 @@ static void RB_TouchIcon(ImDrawList *list, touchIcon_t icon, const ImVec2 &c, fl
 			break;
 		}
 
-		case TOUCH_ICON_FIRE: {
+		case TOUCH_ICON_FIRE:
+		case TOUCH_ICON_ALTFIRE: {
 			// a crosshair
 			list->AddCircle(c, s * 0.6f, color, 0, thickness);
 

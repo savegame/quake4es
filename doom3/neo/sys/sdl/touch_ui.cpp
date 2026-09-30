@@ -139,10 +139,11 @@ static touchButton_t touchButtons[TB_COUNT] = {
 	{ "_impulse15",		TOUCH_ICON_PREVWEAPON,	0 },
 	{ "_impulse14",		TOUCH_ICON_NEXTWEAPON,	0 },
 #ifdef _HUMANHEAD
-	// no zoom and no reload in Prey: the alternate fire (it zooms the rifle
-	// too) is held like the fire, and the crawler grenade is thrown instead
-	{ "_attackalt",		TOUCH_ICON_ALTFIRE,		TBF_LOOK },
+	// no zoom and no reload in Prey: the crawler grenade is thrown from the
+	// zoom's place, and the alternate fire (it zooms the rifle too) is held
+	// like the fire from the reload's
 	{ "_impulse25",		TOUCH_ICON_GRENADE,		0 },
+	{ "_attackalt",		TOUCH_ICON_ALTFIRE,		TBF_LOOK },
 #else
 	{ "_zoom",			TOUCH_ICON_ZOOM,		TBF_LOOK | TBF_LATCH,		"in_toggleZoom" },
 	{ "_impulse13",		TOUCH_ICON_RELOAD,		0 },
@@ -459,7 +460,13 @@ static void TouchUI_Layout(void) {
 	const float fireY = bottom - 45.0f;
 
 	TouchUI_PlaceButton(TB_FIRE, fireX, fireY, big);
+#ifdef _HUMANHEAD
+	// the alternate fire as small as the weapon buttons, centred where the
+	// reload would be
+	TouchUI_PlaceButton(TB_RELOAD, fireX + (big - gap) * 0.5f + (size - small) * 0.5f, fireY - gap - (size + small) * 0.5f, small);
+#else
 	TouchUI_PlaceButton(TB_RELOAD, fireX + (big - gap) * 0.5f, fireY - gap - size, size);
+#endif
 	TouchUI_PlaceButton(TB_ZOOM, right - size, fireY - size * 0.5, size);
 }
 

@@ -65,10 +65,8 @@ ID_INLINE const char *TouchOverlay_IconText(touchIcon_t icon)
 			return "LOAD";
 		case TOUCH_ICON_SPIRIT:
 			return "SPIRIT";
-		case TOUCH_ICON_ALTFIRE:
-			return "ALT";
 		case TOUCH_ICON_GRENADE:
-			return "GREN";
+			return "G";
 		default:
 			return NULL;
 	}
