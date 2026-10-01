@@ -956,6 +956,13 @@ void RB_STD_T_RenderShaderPasses(const drawSurf_t *surf)
 	tri = surf->geo;
 	shader = surf->material;
 
+#ifdef _GLOW_PASS
+	// the glow pass only wants the surfaces that have something to glow
+	if (backEnd.glowPass && !R_Glow_MaterialHasGlow(shader)) {
+		return;
+	}
+#endif
+
 	if(r_lightingModel == LM_NOLIGHTING)
 	{
 		if(!shader->HasAmbient() && !shader->ReceivesLighting())
@@ -1039,6 +1046,12 @@ void RB_STD_T_RenderShaderPasses(const drawSurf_t *surf)
 		if (regs[ pStage->conditionRegister ] == 0) {
 			continue;
 		}
+
+#ifdef _GLOW_PASS
+		if (backEnd.glowPass && !pStage->isGlow) {
+			continue;
+		}
+#endif
 
 		// skip the stages involved in lighting
 		if(r_lightingModel == LM_NOLIGHTING)
@@ -2598,6 +2611,12 @@ void	RB_STD_DrawView(void)
 
 	// fob and blend lights
 	RB_STD_FogAllLights();
+
+#ifdef _GLOW_PASS
+	// the glow goes over the shaded scene, before the post process surfaces
+	// copy it to _currentRender
+	RB_Glow_DrawView(drawSurfs, processed);
+#endif
 
 	// now draw any post-processing effects using _currentRender
 	if (processed < numDrawSurfs) {

@@ -540,6 +540,10 @@ void Framebuffer::Init()
 
 void Framebuffer::Shutdown()
 {
+#ifdef _GLOW_PASS
+	// before the screen framebuffer, whose depth buffer the glow borrows
+	RB_Glow_Shutdown();
+#endif
 #ifdef _AURORA_FBO
 	auroraFramebuffer.Shutdown();
 #endif

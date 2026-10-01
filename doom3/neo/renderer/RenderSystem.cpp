@@ -1333,3 +1333,4 @@ void idRenderSystemLocal::EndFrame(byte *data, int *frontEndMsec, int *backEndMs
 
 #include "rb/Framebuffer.cpp"
 #include "rb/AuroraFramebuffer.cpp"
+#include "rb/GlowPass.cpp"

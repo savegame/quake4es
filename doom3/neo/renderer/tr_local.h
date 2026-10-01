@@ -888,6 +888,9 @@ typedef struct {
 	// A high dynamic range card will have this set to 1.0.
 
 	bool				currentRenderCopied;	// true if any material has already referenced _currentRender
+#ifdef _HUMANHEAD
+	bool				glowPass;				// drawing only the glowStage stages, into the glow buffer
+#endif
 
 	// our OpenGL state deltas
 	glstate_t			glState;
@@ -1164,6 +1167,8 @@ extern void RB_FenceSync(void);
 #include "rb/OcclusionQuery.h"
 #endif
 #endif
+
+#include "rb/GlowPass.h"
 //#define DEBUG_SYNC_MIN_INTERVAL 1
 #ifdef DEBUG_SYNC_MIN_INTERVAL
 extern idCVar r_showSwapBuffers;

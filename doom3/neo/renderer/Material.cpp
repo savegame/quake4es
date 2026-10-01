@@ -1126,6 +1126,7 @@ void idMaterial::ClearStage(shaderStage_t *ss)
 	                ss->color.registers[2] =
 	                        ss->color.registers[3] = GetExpressionConstant(1);
 #ifdef _HUMANHEAD //k: scope view support
+	ss->isGlow = false;
 	ss->isScopeView = false;
 	ss->isNotScopeView = false;
 	ss->isSpiritWalk = false;
@@ -2336,6 +2337,7 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 #ifdef _HUMANHEAD
         if (!token.Icmp("glowStage"))
         {
+            ss->isGlow = true;	// also drawn into the glow overlay, see rb/GlowPass.cpp
             continue;
         }
         if (!token.Icmp("specularexp"))
