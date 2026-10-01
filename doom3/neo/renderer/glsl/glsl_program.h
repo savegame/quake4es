@@ -51,6 +51,7 @@ GLSL_PROGRAM_PROC shaderProgram_t radialblurShader; //k: screen effect shader: d
 GLSL_PROGRAM_PROC shaderProgram_t liquidShader; //k: liquid shader: game/salvage
 GLSL_PROGRAM_PROC shaderProgram_t membraneShader; //k: membrane liquid shader: rocketlauncher
 GLSL_PROGRAM_PROC shaderProgram_t screenprocessShader; //k: screen process shader
+GLSL_PROGRAM_PROC shaderProgram_t distortShader; // distort shader: the warp around the portals
 #endif
 
 // shadow mapping

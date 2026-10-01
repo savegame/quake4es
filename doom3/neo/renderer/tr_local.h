@@ -1761,6 +1761,7 @@ typedef enum {
 	SHADER_LIQUID, // liquid
     SHADER_MEMBRANE, // membrane
 	SHADER_SCREENPROCESS, // unused
+	SHADER_DISTORT, // portal warp
 #endif
     SHADER_MEGATEXTURE,
 	// shadow mapping

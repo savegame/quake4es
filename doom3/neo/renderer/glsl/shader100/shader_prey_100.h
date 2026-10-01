@@ -15,3 +15,6 @@
 #include "prey/membrane.vert.h"
 #include "prey/membrane.frag.h"
 #endif
+
+#include "prey/distort.vert.h"
+#include "prey/distort.frag.h"

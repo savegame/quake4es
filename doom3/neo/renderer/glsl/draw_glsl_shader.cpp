@@ -234,6 +234,7 @@ static void RB_GLSL_GetShaderSources(idList<GLSLShaderProp> &ret)
 	ret.Append(GLSL_SHADER_SOURCE("liquid", SHADER_LIQUID, &liquidShader, LIQUID_VERT, LIQUID_FRAG, "", ""));
 	ret.Append(GLSL_SHADER_SOURCE("membrane", SHADER_MEMBRANE, &membraneShader, MEMBRANE_VERT, MEMBRANE_FRAG, "", ""));
 	ret.Append(GLSL_SHADER_SOURCE("screenprocess", SHADER_SCREENPROCESS, &screenprocessShader, SCREENPROCESS_VERT, SCREENPROCESS_FRAG, "", ""));
+	ret.Append(GLSL_SHADER_SOURCE("distort", SHADER_DISTORT, &distortShader, DISTORT_VERT, DISTORT_FRAG, "", ""));
 #endif
     ret.Append(GLSL_SHADER_SOURCE("megaTexture", SHADER_MEGATEXTURE, &megaTextureShader, MEGATEXTURE_VERT, MEGATEXTURE_FRAG, "", ""));
 
