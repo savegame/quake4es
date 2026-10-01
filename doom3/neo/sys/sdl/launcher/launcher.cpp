@@ -122,6 +122,9 @@ bool           g_owned   = false; // true while launcher still owns the window/c
 static const float kElemScale = 0.8f;
 static inline float ES() { return ImGui::GetFontSize() * kElemScale; }
 
+/* Height of the switches and the sliders of the settings. */
+static inline float ControlHeight() { return ES() * 1.6f; }
+
 /* Extra vertical compression (font untouched): buttons 20% lower,
    tabs 30% lower. */
 static const float kBtnScale = 0.8f;
@@ -859,7 +862,7 @@ void DrawGraphicsSettings()
 		case GFX_TOGGLE:
 		{
 			bool on = ( atoi( value.c_str()) != 0 ) != g.inverted;
-			if( AuroraLauncher_LabelToggle( g.label, &on, fs * 1.6f ))
+			if( AuroraLauncher_LabelToggle( g.label, &on, ControlHeight()))
 				value = ( on != g.inverted ) ? "1" : "0";
 			break;
 		}
@@ -887,7 +890,7 @@ void DrawGraphicsSettings()
 			ImGui::TextUnformatted( g.label );
 			float f = (float)atof( value.c_str());
 			float rect[4];
-			if( AuroraLauncher_StepSlider( g.cvar, &f, g.minValue, g.maxValue, 0.05f, "%.2f", btn_h, rect ))
+			if( AuroraLauncher_StepSlider( g.cvar, &f, g.minValue, g.maxValue, 0.05f, "%.2f", ControlHeight(), rect ))
 			{
 				char buf[32];
 				snprintf( buf, sizeof( buf ), "%.2f", f );
@@ -927,7 +930,7 @@ void DrawTab_Settings()
 	{
 		float rect[4];
 		AuroraLauncher_StepSlider( "r_3d_scale", &g_settings.r_3d_scale, 0.25f, 2.0f, 0.05f,
-			"%.2f", fs * 3.f * kBtnScale, rect );
+			"%.2f", ControlHeight(), rect );
 		RegisterDragRect( rect );
 	}
 
