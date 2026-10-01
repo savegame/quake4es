@@ -1608,6 +1608,9 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 	imageName[0] = 0;
 
 	memset(&newStage, 0, sizeof(newStage));
+#if defined(_HUMANHEAD) && defined(GL_ES_VERSION_2_0)
+	bool usesProgram = false;
+#endif
 
 	ss = &pd->parseStages[numStages];
 	ts = &ss->texture;
@@ -2149,6 +2152,9 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 		}
 #else
 		if (!token.Icmp("program")) {
+#if defined(_HUMANHEAD) && defined(GL_ES_VERSION_2_0)
+			usesProgram = true;
+#endif
 			if (src.ReadTokenOnLine(&token)) {
 #if !defined(GL_ES_VERSION_2_0)
 				newStage.vertexProgram = R_FindARBProgram(GL_VERTEX_PROGRAM_ARB, token.c_str());
@@ -2176,6 +2182,9 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 #endif
 
 		if (!token.Icmp("fragmentProgram")) {
+#if defined(_HUMANHEAD) && defined(GL_ES_VERSION_2_0)
+			usesProgram = true;
+#endif
 			if (src.ReadTokenOnLine(&token)) {
 #if !defined(GL_ES_VERSION_2_0)
 				newStage.fragmentProgram = R_FindARBProgram(GL_FRAGMENT_PROGRAM_ARB, token.c_str());
@@ -2197,6 +2206,9 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 		}
 
 		if (!token.Icmp("vertexProgram")) {
+#if defined(_HUMANHEAD) && defined(GL_ES_VERSION_2_0)
+			usesProgram = true;
+#endif
 			if (src.ReadTokenOnLine(&token)) {
 #if !defined(GL_ES_VERSION_2_0)
 				newStage.vertexProgram = R_FindARBProgram(GL_VERTEX_PROGRAM_ARB, token.c_str());
@@ -2564,6 +2576,17 @@ void idMaterial::ParseStage(idLexer &src, const textureRepeat_t trpDefault)
 		return;
 	}
 
+
+#if defined(_HUMANHEAD) && defined(GL_ES_VERSION_2_0)
+	// Prey's ARB programs that have no GLSL counterpart (skin, hair, cloth,
+	// refraction...) leave a stage that has no image of its own without
+	// anything to draw, and it would be drawn opaque with the default image
+	// over the surface: leave the stage out instead
+	if (usesProgram && SHADER_HANDLE_IS_INVALID(newStage.glslProgram) && !imageName[0] && !ts->cinematic && !ts->dynamic) {
+		common->DPrintf("material '%s': a stage with a missing program is left out\n", GetName());
+		return;
+	}
+#endif
 
 	// if we are using newStage, allocate a copy of it
 #if !defined(GL_ES_VERSION_2_0)
