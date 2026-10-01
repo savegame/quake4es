@@ -670,7 +670,13 @@ const void	RB_CopyRender(const void *data)
 	RB_LogComment("***************** RB_CopyRender *****************\n");
 
 	if (cmd->image) {
+#ifdef _AURORA_FBO
+		int x = cmd->x, y = cmd->y, w = cmd->imageWidth, h = cmd->imageHeight;
+		auroraFramebuffer.ScaleRect(&x, &y, &w, &h);
+		cmd->image->CopyFramebuffer(x, y, w, h, false);
+#else
 		cmd->image->CopyFramebuffer(cmd->x, cmd->y, cmd->imageWidth, cmd->imageHeight, false);
+#endif
 	}
 }
 
@@ -693,6 +699,11 @@ void RB_ExecuteBackEndCommands(const emptyCommand_t *cmds)
 	}
 
 	backEndStartTime = Sys_Milliseconds();
+
+#ifdef _AURORA_FBO
+	// every frame starts with the scene
+	auroraFramebuffer.BeginFrame();
+#endif
 
 	// needed for editor rendering
 	RB_SetDefaultGLState();

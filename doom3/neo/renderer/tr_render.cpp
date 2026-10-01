@@ -1009,6 +1009,13 @@ void RB_DrawView(const void *data)
 		return;
 	}
 
+#ifdef _AURORA_FBO
+	// the 2D goes to the FSR output, at its resolution, over the upscaled scene
+	if (!backEnd.viewDef->viewEntitys) {
+		auroraFramebuffer.BeginOutput();
+	}
+#endif
+
 	// skip render bypasses everything that has models, assuming
 	// them to be 3D views, but leaves 2D rendering visible
 	if (r_skipRender.GetBool() && backEnd.viewDef->viewEntitys) {

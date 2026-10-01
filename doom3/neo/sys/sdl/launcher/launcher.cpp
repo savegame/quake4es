@@ -328,6 +328,16 @@ struct GfxSetting
 };
 
 static const std::vector<GfxSetting> kGfxSettings = {
+#if defined(_AURORA_FBO)
+	{ "r_auroraFsr", "FSR апскейл", "Сцена рендерится в разрешении рендера выше, а AMD FSR "
+		"поднимает её до выбранного ниже; меню и HUD рисуются уже в нём. "
+		"Например, рендер 0.25 и FSR до 0.5 — быстро и чётко на плотном экране.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "r_auroraFsrScale", "Разрешение после FSR", nullptr,
+		GFX_CHOICE, "0.5", false, { { "0.5", "0.5" }, { "0.75", "0.75" }, { "1.0", "1.0" } }, 0, 0 },
+	{ "r_auroraFsrSharpness", "Резкость FSR", nullptr,
+		GFX_CHOICE, "0.25", false, { { "Мягко", "1.0" }, { "Средне", "0.5" }, { "Резко", "0.25" }, { "Макс", "0" } }, 0, 0 },
+#endif
 	{ "r_shadows", "Тени", "Тени от источников света. Заметно нагружают GPU.",
 		GFX_TOGGLE, "1", false, {}, 0, 0 },
 	{ "r_skipBump", "Рельеф поверхностей", "Карты нормалей: объём на стенах и персонажах.",

@@ -351,6 +351,12 @@ void Aurora_DisplayFrame(void)
 		r_auroraScale.ClearModified();
 		auroraFramebuffer.SetScale(r_auroraScale.GetFloat());
 	}
+
+	if (r_auroraFsr.IsModified() || r_auroraFsrScale.IsModified()) {
+		r_auroraFsr.ClearModified();
+		r_auroraFsrScale.ClearModified();
+		auroraFramebuffer.SetFsr(r_auroraFsr.GetBool(), r_auroraFsrScale.GetFloat());
+	}
 }
 
 #endif

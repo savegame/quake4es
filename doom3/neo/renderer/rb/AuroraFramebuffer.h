@@ -3,6 +3,8 @@
 
 #ifdef _AURORA_FBO
 
+#include "AuroraFsr.h"
+
 class idFramebuffer;
 
 // values of the wl_output_transform enum, the angles are counter-clockwise.
@@ -70,6 +72,33 @@ class idAuroraFramebuffer
         // Real window size changed: rebuild the buffer to match it.
         bool                Resize(int windowWidth, int windowHeight);
 
+        // FSR: the scene, rendered at the render scale, is brought up to an
+        // output buffer at outputScale of the window, measured against the
+        // same budget, and the 2D goes there at that resolution. Off when
+        // disabled or when the output would not be bigger than the scene.
+        bool                SetFsr(bool enabled, float outputScale);
+        bool                FsrActive(void) const {
+            return fsrEnabled && fsr.IsBuilt();
+        }
+
+        // Start of the backend's commands: the frame begins with the scene.
+        void                BeginFrame(void);
+
+        // The scene is done: upscale it and send whatever is drawn after it
+        // to the output buffer. Called before the first 2D view of a frame,
+        // or from Draw() when there was none; does nothing without FSR.
+        void                BeginOutput(void);
+
+        // true from BeginOutput() to the end of the frame
+        bool                IsOutputActive(void) const {
+            return outputActive;
+        }
+
+        // A rectangle in the coordinates of the engine (those of the scene
+        // buffer) to those of the buffer drawn into, which differ while the
+        // output is active.
+        void                ScaleRect(int *x, int *y, int *w, int *h) const;
+
         // Display 0 is the built-in one and it is the reference: the user
         // tuned the render scale for it, so its size is what the pixel budget
         // is measured against, whatever window the application ends up in.
@@ -122,6 +151,7 @@ class idAuroraFramebuffer
         void                BuildRotationMatrices(void);
         void                PublishSize(void);
         void                InvalidateEngineGLState(void);
+        void                BuildFsr(void);
 
         bool                active;
 
@@ -153,15 +183,25 @@ class idAuroraFramebuffer
 
         uint32_t            vertexBuffer;
 
+        idAuroraFsr         fsr;
+        bool                fsrEnabled;
+        float               fsrScale;
+        bool                outputActive;
+
         idAuroraFramebuffer(const idAuroraFramebuffer &);
         idAuroraFramebuffer & operator=(const idAuroraFramebuffer &);
 };
 
 extern idAuroraFramebuffer auroraFramebuffer;
 
+uint32_t R_AuroraCompileShader(GLenum type, const char *source);
+
 extern idCVar r_auroraFramebuffer;
 extern idCVar r_auroraScale;
 extern idCVar r_auroraRotation;
+extern idCVar r_auroraFsr;
+extern idCVar r_auroraFsrScale;
+extern idCVar r_auroraFsrSharpness;
 
 union SDL_Event;
 

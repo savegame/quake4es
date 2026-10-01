@@ -543,6 +543,16 @@ void RB_SetProgramEnvironment(void)
 	parm[0] = (float)w / (float)pot;
 
 	int	 h = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+
+#ifdef _AURORA_FBO
+	// _currentRender and gl_FragCoord are in pixels of the FSR output once
+	// the scene is upscaled
+	{
+		int x = backEnd.viewDef->viewport.x1, y = backEnd.viewDef->viewport.y1;
+		auroraFramebuffer.ScaleRect(&x, &y, &w, &h);
+		parm[0] = (float)w / (float)pot;
+	}
+#endif
 	pot = globalImages->currentRenderImage->uploadHeight;
 	parm[1] = (float)h / (float)pot;
 
@@ -1705,9 +1715,19 @@ int RB_STD_DrawShaderPasses(drawSurf_t **drawSurfs, int numDrawSurfs)
 		if (backEnd.viewDef->viewEntitys)
 #endif
 		{
+#ifdef _AURORA_FBO
+			// in the coordinates of the FSR output once the scene is upscaled
+			int x = backEnd.viewDef->viewport.x1;
+			int y = backEnd.viewDef->viewport.y1;
+			int w = backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1;
+			int h = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+			auroraFramebuffer.ScaleRect(&x, &y, &w, &h);
+			globalImages->currentRenderImage->CopyFramebuffer(x, y, w, h, true);
+#else
 			globalImages->currentRenderImage->CopyFramebuffer(backEnd.viewDef->viewport.x1,
 			                backEnd.viewDef->viewport.y1,  backEnd.viewDef->viewport.x2 -  backEnd.viewDef->viewport.x1 + 1,
 			                backEnd.viewDef->viewport.y2 -  backEnd.viewDef->viewport.y1 + 1, true);
+#endif
 		}
 
 #ifdef _SPLASHDAMAGE //karin: clear all postprocess images

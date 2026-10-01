@@ -9,6 +9,9 @@ idAuroraFramebuffer auroraFramebuffer;
 
 idCVar r_auroraFramebuffer("r_auroraFramebuffer", "1", CVAR_RENDERER | CVAR_BOOL | CVAR_INIT, "render the frame into an intermediate framebuffer and draw it with a quad before swap");
 idCVar r_auroraScale("r_auroraScale", "1.0", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "resolution the scene is rendered at, as a fraction of the window: below 1 renders smaller and scales up, above 1 supersamples", 0.25f, 2.0f);
+idCVar r_auroraFsr("r_auroraFsr", "0", CVAR_RENDERER | CVAR_BOOL | CVAR_ARCHIVE, "upscale the scene with AMD FSR 1.0 to r_auroraFsrScale of the window, and draw the 2D there");
+idCVar r_auroraFsrScale("r_auroraFsrScale", "0.5", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "resolution FSR brings the scene up to, as a fraction of the window; it has to be above r_auroraScale to do anything", 0.25f, 1.0f);
+idCVar r_auroraFsrSharpness("r_auroraFsrSharpness", "0.25", CVAR_RENDERER | CVAR_FLOAT | CVAR_ARCHIVE, "FSR sharpening in stops: 0 is the sharpest, 2 hardly sharpens", 0.0f, 2.0f);
 idCVar r_auroraRotation("r_auroraRotation", "-1", CVAR_RENDERER | CVAR_INTEGER, "override the content rotation for testing: -1 follows the display, 0/1/2/3 are the wl_output_transform values", -1, 3);
 
 static const char *AURORA_FBO_NAME = "_auroraScreen";
@@ -85,7 +88,7 @@ static const char *R_AuroraShaderVersion(void)
 R_AuroraCompileShader
 ====================
 */
-static uint32_t R_AuroraCompileShader(GLenum type, const char *source)
+uint32_t R_AuroraCompileShader(GLenum type, const char *source)
 {
     const char *version = R_AuroraShaderVersion();
 
@@ -147,7 +150,10 @@ idAuroraFramebuffer::idAuroraFramebuffer()
     rotationUniform(-1),
     vertexAttrib(-1),
     texCoordAttrib(-1),
-    vertexBuffer(0)
+    vertexBuffer(0),
+    fsrEnabled(false),
+    fsrScale(0.5f),
+    outputActive(false)
 {
     memset(rotationMatrices, 0, sizeof(rotationMatrices));
 }
@@ -197,6 +203,10 @@ uint32_t idAuroraFramebuffer::GetFramebuffer(void) const
 {
     if (!active || !fb) {
         return 0;
+    }
+
+    if (outputActive) {
+        return fsr.OutputFramebuffer();
     }
 
     return fb->GetFramebuffer();
@@ -507,7 +517,9 @@ bool idAuroraFramebuffer::Build(int newWindowWidth, int newWindowHeight, auroraT
 
     if (!sizeChanged && fb) {
         // a turn between two sideways transforms keeps the size, and then only
-        // the matrix changes: nothing to rebuild
+        // the matrix changes: nothing to rebuild. The output follows the
+        // window, which may have changed with the same scene size.
+        BuildFsr();
         return true;
     }
 
@@ -537,6 +549,8 @@ bool idAuroraFramebuffer::Build(int newWindowWidth, int newWindowHeight, auroraT
     fb->Unbind();
 
     PublishSize();
+
+    BuildFsr();
 
     return true;
 }
@@ -582,6 +596,9 @@ bool idAuroraFramebuffer::Init(int w, int h)
 
     // the reference display is reported by the platform layer right after
     // this, in Aurora_DisplayInit()
+
+    fsrEnabled = r_auroraFsr.GetBool();
+    fsrScale = r_auroraFsrScale.GetFloat();
 
     // no rotation until the platform layer reports the display orientation
     if (!Build(w, h, AURORA_TRANSFORM_NORMAL, initialScale)) {
@@ -769,7 +786,11 @@ idAuroraFramebuffer::Shutdown
 */
 void idAuroraFramebuffer::Shutdown(void)
 {
+    BeginFrame();
+
     active = false;
+
+    fsr.Shutdown();
 
     DestroyBuffer();
 
@@ -804,6 +825,250 @@ void idAuroraFramebuffer::Shutdown(void)
     referenceDisplayWidth = referenceDisplayHeight = 0;
     rotation = AURORA_TRANSFORM_NORMAL;
     scale = 1.0f;
+}
+
+/*
+====================
+FSR output
+
+While the output is active the engine keeps believing the screen is the size
+of the scene, glConfig.vidWidth by vidHeight, and sets its viewports and
+scissors in those coordinates. qglViewport and qglScissor are function
+pointers, so for the rest of the frame they are swapped for these, which
+scale every rectangle onto the output buffer. Nothing that calls them has to
+know.
+====================
+*/
+typedef void (GL_APIENTRYP auroraRectProc_t)(GLint x, GLint y, GLsizei width, GLsizei height);
+
+static auroraRectProc_t auroraRealViewport = NULL;
+static auroraRectProc_t auroraRealScissor = NULL;
+static float auroraOutputScaleX = 1.0f;
+static float auroraOutputScaleY = 1.0f;
+
+static void R_AuroraScaleRect(GLint *x, GLint *y, GLsizei *w, GLsizei *h)
+{
+    // the edges are scaled rather than the size, so that rectangles which
+    // meet in the scene still meet in the output
+    const int x0 = (int)idMath::Floor(*x * auroraOutputScaleX + 0.5f);
+    const int y0 = (int)idMath::Floor(*y * auroraOutputScaleY + 0.5f);
+    const int x1 = (int)idMath::Floor((*x + *w) * auroraOutputScaleX + 0.5f);
+    const int y1 = (int)idMath::Floor((*y + *h) * auroraOutputScaleY + 0.5f);
+
+    *x = x0;
+    *y = y0;
+    *w = x1 - x0;
+    *h = y1 - y0;
+}
+
+static void GL_APIENTRY R_AuroraScaledViewport(GLint x, GLint y, GLsizei w, GLsizei h)
+{
+    R_AuroraScaleRect(&x, &y, &w, &h);
+    auroraRealViewport(x, y, w, h);
+}
+
+static void GL_APIENTRY R_AuroraScaledScissor(GLint x, GLint y, GLsizei w, GLsizei h)
+{
+    R_AuroraScaleRect(&x, &y, &w, &h);
+    auroraRealScissor(x, y, w, h);
+}
+
+static void R_AuroraInstallScaledRects(float scaleX, float scaleY)
+{
+    auroraOutputScaleX = scaleX;
+    auroraOutputScaleY = scaleY;
+
+    if (!auroraRealViewport) {
+        auroraRealViewport = qglViewport;
+        auroraRealScissor = qglScissor;
+        qglViewport = R_AuroraScaledViewport;
+        qglScissor = R_AuroraScaledScissor;
+    }
+}
+
+static void R_AuroraRemoveScaledRects(void)
+{
+    if (auroraRealViewport) {
+        qglViewport = auroraRealViewport;
+        qglScissor = auroraRealScissor;
+        auroraRealViewport = NULL;
+        auroraRealScissor = NULL;
+    }
+
+    auroraOutputScaleX = auroraOutputScaleY = 1.0f;
+}
+
+/*
+====================
+idAuroraFramebuffer::BuildFsr
+
+The output is sized like the scene buffer: the window at the output scale,
+held to the budget of the reference display, sides swapped when the content
+is turned onto its side. Built only when it comes out bigger than the scene.
+====================
+*/
+void idAuroraFramebuffer::BuildFsr(void)
+{
+    if (!fsrEnabled || !fb || windowWidth <= 0 || windowHeight <= 0) {
+        fsr.Destroy();
+        return;
+    }
+
+    int outputWidth;
+    int outputHeight;
+
+    BufferSizeForWindow(windowWidth, windowHeight, fsrScale, &outputWidth, &outputHeight);
+
+    if (TransformIsSideways(rotation)) {
+        const int swap = outputWidth;
+        outputWidth = outputHeight;
+        outputHeight = swap;
+    }
+
+    if (outputWidth <= width || outputHeight <= height) {
+        if (fsr.IsBuilt()) {
+            common->Printf("[Aurora FSR]: output %d x %d is not above the scene %d x %d, off\n", outputWidth, outputHeight, width, height);
+        }
+
+        fsr.Destroy();
+        return;
+    }
+
+    if (!fsr.Build(width, height, outputWidth, outputHeight)) {
+        common->Warning("[Aurora FSR]: could not be built, off");
+        fsr.Destroy();
+    }
+
+    qglBindFramebuffer(GL_FRAMEBUFFER, fb->GetFramebuffer());
+}
+
+/*
+====================
+idAuroraFramebuffer::SetFsr
+====================
+*/
+bool idAuroraFramebuffer::SetFsr(bool enabled, float outputScale)
+{
+    if (outputScale < AURORA_SCALE_MIN) {
+        outputScale = AURORA_SCALE_MIN;
+    } else if (outputScale > 1.0f) {
+        outputScale = 1.0f;
+    }
+
+    if (enabled == fsrEnabled && outputScale == fsrScale) {
+        return true;
+    }
+
+    fsrEnabled = enabled;
+    fsrScale = outputScale;
+
+    if (!active) {
+        return false;
+    }
+
+    BeginFrame();
+    BuildFsr();
+
+    common->Printf("[Aurora FSR]: %s, output scale %.2f\n", FsrActive() ? "on" : "off", fsrScale);
+
+    return true;
+}
+
+/*
+====================
+idAuroraFramebuffer::BeginFrame
+
+Also puts things back when the last frame never reached Draw(), which is what
+a screenshot does.
+====================
+*/
+void idAuroraFramebuffer::BeginFrame(void)
+{
+    R_AuroraRemoveScaledRects();
+
+    if (outputActive) {
+        outputActive = false;
+
+        if (fb) {
+            qglBindFramebuffer(GL_FRAMEBUFFER, fb->GetFramebuffer());
+            backEnd.glState.currentFramebuffer = NULL;
+        }
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::BeginOutput
+====================
+*/
+void idAuroraFramebuffer::BeginOutput(void)
+{
+    if (!active || outputActive || !FsrActive()) {
+        return;
+    }
+
+    const GLboolean scissorTest = qglIsEnabled(GL_SCISSOR_TEST);
+    const GLboolean depthTest = qglIsEnabled(GL_DEPTH_TEST);
+    const GLboolean stencilTest = qglIsEnabled(GL_STENCIL_TEST);
+    const GLboolean cullFace = qglIsEnabled(GL_CULL_FACE);
+    const GLboolean blend = qglIsEnabled(GL_BLEND);
+    const GLboolean polygonOffset = qglIsEnabled(GL_POLYGON_OFFSET_FILL);
+
+    GL_SelectTexture(0);
+
+    qglDisable(GL_SCISSOR_TEST);
+    qglDisable(GL_DEPTH_TEST);
+    qglDisable(GL_STENCIL_TEST);
+    qglDisable(GL_CULL_FACE);
+    qglDisable(GL_BLEND);
+    qglDisable(GL_POLYGON_OFFSET_FILL);
+    qglDepthMask(GL_FALSE);
+    qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    // leaves the output buffer bound
+    fsr.Upscale(colorTexture, r_auroraFsrSharpness.GetFloat());
+
+    // the 2D draws over the upscaled scene, with a depth buffer of its own
+    // for the 3D views a GUI may hold
+    qglDepthMask(GL_TRUE);
+    qglClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+#define AURORA_RESTORE(cap, on) if (on) { qglEnable(cap); } else { qglDisable(cap); }
+    AURORA_RESTORE(GL_SCISSOR_TEST, scissorTest);
+    AURORA_RESTORE(GL_DEPTH_TEST, depthTest);
+    AURORA_RESTORE(GL_STENCIL_TEST, stencilTest);
+    AURORA_RESTORE(GL_CULL_FACE, cullFace);
+    AURORA_RESTORE(GL_BLEND, blend);
+    AURORA_RESTORE(GL_POLYGON_OFFSET_FILL, polygonOffset);
+#undef AURORA_RESTORE
+
+    outputActive = true;
+
+    R_AuroraInstallScaledRects((float)fsr.OutputWidth() / width, (float)fsr.OutputHeight() / height);
+
+    InvalidateEngineGLState();
+}
+
+/*
+====================
+idAuroraFramebuffer::ScaleRect
+====================
+*/
+void idAuroraFramebuffer::ScaleRect(int *x, int *y, int *w, int *h) const
+{
+    if (!outputActive) {
+        return;
+    }
+
+    GLint gx = *x, gy = *y;
+    GLsizei gw = *w, gh = *h;
+
+    R_AuroraScaleRect(&gx, &gy, &gw, &gh);
+
+    *x = gx;
+    *y = gy;
+    *w = gw;
+    *h = gh;
 }
 
 /*
@@ -846,6 +1111,15 @@ void idAuroraFramebuffer::Draw(void)
         return;
     }
 
+    // a frame without any 2D still has to go through FSR
+    BeginOutput();
+
+    // the real viewport from here on, for the quad and whatever follows it
+    R_AuroraRemoveScaledRects();
+
+    const uint32_t texture = outputActive ? fsr.OutputTexture() : colorTexture;
+    outputActive = false;
+
     // the real backbuffer, not the one the engine believes in
     qglBindFramebuffer(GL_FRAMEBUFFER, 0);
     backEnd.glState.currentFramebuffer = NULL;
@@ -864,7 +1138,7 @@ void idAuroraFramebuffer::Draw(void)
     qglUniformMatrix2fv(rotationUniform, 1, GL_FALSE, currentRotationMatrix);
 
     qglActiveTexture(GL_TEXTURE0);
-    qglBindTexture(GL_TEXTURE_2D, colorTexture);
+    qglBindTexture(GL_TEXTURE_2D, texture);
     qglUniform1i(textureUniform, 0);
 
     qglBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);

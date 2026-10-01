@@ -385,7 +385,8 @@ void RB_Glow_DrawView(drawSurf_t **drawSurfs, int numDrawSurfs)
     }
 
     // the main view only: mirrors, portals and cameras go without it
-    if (!backEnd.viewDef->viewEntitys || backEnd.viewDef->isSubview || !auroraFramebuffer.IsActive()) {
+    // nor the views a GUI draws over the FSR output, which has no glow buffer
+    if (!backEnd.viewDef->viewEntitys || backEnd.viewDef->isSubview || !auroraFramebuffer.IsActive() || auroraFramebuffer.IsOutputActive()) {
         return;
     }
 
