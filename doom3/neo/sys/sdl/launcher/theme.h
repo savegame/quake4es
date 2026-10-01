@@ -33,4 +33,12 @@ bool AuroraLauncher_Toggle( const char *id, bool *value, float height );
 // Returns true on the frame the value was flipped.
 bool AuroraLauncher_LabelToggle( const char *label, bool *value, float height );
 
+// A slider with "-" and "+" buttons at its sides, every value snapped to step
+// from min. The buttons move it a step each. sliderRect, when given, receives
+// the screen rectangle of the slider itself (x0, y0, x1, y1), so that the
+// caller's touch handling can tell a drag on it from a scroll. Returns true
+// on the frame the value changed.
+bool AuroraLauncher_StepSlider( const char *id, float *value, float min, float max, float step,
+                                const char *format, float height, float sliderRect[4] );
+
 #endif // LAUNCHER_THEME_H

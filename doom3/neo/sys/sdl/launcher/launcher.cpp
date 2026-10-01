@@ -172,8 +172,41 @@ struct TouchState
 	float start_x    = 0.f, start_y = 0.f;
 	float last_x     = 0.f, last_y  = 0.f;
 	float total_dist = 0.f;
+	bool  drag       = false; // started on a slider: drives the mouse instead of scrolling
 };
 TouchState g_touch;
+
+/* Screen rectangles (x0, y0, x1, y1) of the sliders drawn in the last frame.
+   A finger that lands on one drags it, everywhere else a drag scrolls. */
+std::vector<ImVec4> g_drag_rects;
+
+void RegisterDragRect( const float r[4] )
+{
+	g_drag_rects.push_back( ImVec4( r[0], r[1], r[2], r[3] ));
+}
+
+bool InDragRect( float x, float y )
+{
+	for( const ImVec4 &r : g_drag_rects )
+		if( x >= r.x && x <= r.z && y >= r.y && y <= r.w )
+			return true;
+	return false;
+}
+
+void PushMouseButton( Uint32 timestamp, Uint32 type, float x, float y )
+{
+	SDL_Event e = {};
+	e.type = type;
+	e.button.timestamp = timestamp;
+	e.button.windowID  = SDL_GetWindowID( g_window );
+	e.button.which     = SDL_TOUCH_MOUSEID;
+	e.button.button    = SDL_BUTTON_LEFT;
+	e.button.state     = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+	e.button.clicks    = 1;
+	e.button.x         = (int)x;
+	e.button.y         = (int)y;
+	SDL_PushEvent( &e );
+}
 float      g_scroll_pending_px = 0.f;
 
 // ----------------------------------------------------------------------
@@ -354,6 +387,29 @@ static const std::vector<GfxSetting> kGfxSettings = {
 	{ "r_glowSteps", "Ширина свечения", "Шире ореол — больше проходов размытия.",
 		GFX_CHOICE, "2", false, { { "Узко", "1" }, { "Средне", "2" }, { "Широко", "4" } }, 0, 0 },
 #endif
+	/* shadows and lighting of idTech4A++ */
+	{ "r_useShadowMapping", "Мягкие тени", "Shadow mapping вместо стенсильных теней: размытые края. Нагружает GPU.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "r_shadowMapSamples", "Качество мягких теней", nullptr,
+		GFX_CHOICE, "16", false, { { "Низкое", "1" }, { "Среднее", "4" }, { "Высокое", "16" } }, 0, 0 },
+	{ "harm_r_stencilShadowSoft", "Мягкие края обычных теней", "Размытие краёв стенсильных теней. Нужен OpenGL ES 3.1.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "harm_r_stencilShadowTranslucent", "Полупрозрачные тени", "Тени от стекла, решёток и частиц.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "harm_r_lightingModel", "Модель освещения", "Phong — как в оригинале.",
+		GFX_CHOICE, "1", false, { { "Phong", "1" }, { "Blinn-Phong", "2" }, { "PBR", "3" } }, 0, 0 },
+	{ "harm_r_globalIllumination", "Подсветка теней", "Тени не уходят в полную черноту.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "harm_r_globalIlluminationBrightness", "Яркость подсветки", nullptr,
+		GFX_CHOICE, "0.3", false, { { "0.2", "0.2" }, { "0.3", "0.3" }, { "0.5", "0.5" } }, 0, 0 },
+	{ "r_maxFps", "Лимит FPS", "Меньше нагрев и расход батареи.",
+		GFX_CHOICE, "0", false, { { "Нет", "0" }, { "30", "30" }, { "45", "45" }, { "60", "60" } }, 0, 0 },
+#if defined(_HUMANHEAD)
+	{ "harm_ui_translateAlienFontDistance", "Перевод инопланетных надписей", "Надписи на экранах — читаемым шрифтом.",
+		GFX_CHOICE, "200", false, { { "Выкл", "0" }, { "Вблизи", "200" }, { "Всегда", "-1" } }, 0, 0 },
+	{ "harm_ui_subtitlesTextScale", "Размер субтитров", nullptr,
+		GFX_CHOICE, "0.32", false, { { "Обычный", "0.32" }, { "Крупный", "0.4" }, { "Очень крупный", "0.5" } }, 0, 0 },
+#endif
 	{ "r_lowParticleDetail", "Упрощённые частицы", "Меньше частиц в дыме, огне и взрывах — быстрее.",
 		GFX_TOGGLE, "0", false, {}, 0, 0 },
 	{ "image_anisotropy", "Анизотропная фильтрация", "Чёткость текстур под острым углом.",
@@ -464,6 +520,7 @@ void ProcessTouchEvent( const SDL_Event &in, int win_w, int win_h )
 		g_touch.last_x     = px;
 		g_touch.last_y     = py;
 		g_touch.total_dist = 0.f;
+		g_touch.drag       = InDragRect( px, py );
 
 		/* Move the ImGui "mouse" under the finger so the hover test picks
 		   the right window for any subsequent scroll. */
@@ -475,6 +532,31 @@ void ProcessTouchEvent( const SDL_Event &in, int win_w, int win_h )
 		mv.motion.x         = (int)px;
 		mv.motion.y         = (int)py;
 		SDL_PushEvent( &mv );
+
+		/* on a slider the finger holds the mouse button down right away */
+		if( g_touch.drag )
+			PushMouseButton( in.tfinger.timestamp, SDL_MOUSEBUTTONDOWN, px, py );
+	}
+	else if( in.type == SDL_FINGERMOTION && g_touch.active && g_touch.drag )
+	{
+		g_touch.last_x = px;
+		g_touch.last_y = py;
+
+		SDL_Event mv = {};
+		mv.type = SDL_MOUSEMOTION;
+		mv.motion.timestamp = in.tfinger.timestamp;
+		mv.motion.windowID  = SDL_GetWindowID( g_window );
+		mv.motion.which     = SDL_TOUCH_MOUSEID;
+		mv.motion.state     = SDL_BUTTON_LMASK;
+		mv.motion.x         = (int)px;
+		mv.motion.y         = (int)py;
+		SDL_PushEvent( &mv );
+	}
+	else if( in.type == SDL_FINGERUP && g_touch.active && g_touch.drag )
+	{
+		PushMouseButton( in.tfinger.timestamp, SDL_MOUSEBUTTONUP, px, py );
+		g_touch.active = false;
+		g_touch.drag = false;
 	}
 	else if( in.type == SDL_FINGERMOTION && g_touch.active )
 	{
@@ -804,14 +886,14 @@ void DrawGraphicsSettings()
 		{
 			ImGui::TextUnformatted( g.label );
 			float f = (float)atof( value.c_str());
-			ImGui::PushItemWidth( -1 );
-			if( ImGui::SliderFloat( "##slider", &f, g.minValue, g.maxValue, "%.2f" ))
+			float rect[4];
+			if( AuroraLauncher_StepSlider( g.cvar, &f, g.minValue, g.maxValue, 0.05f, "%.2f", btn_h, rect ))
 			{
 				char buf[32];
 				snprintf( buf, sizeof( buf ), "%.2f", f );
 				value = buf;
 			}
-			ImGui::PopItemWidth();
+			RegisterDragRect( rect );
 			break;
 		}
 		}
@@ -842,9 +924,12 @@ void DrawTab_Settings()
 		"2.0 = supersampling (чётче, но медленнее)." );
 	ImGui::Dummy( ImVec2( 0, fs * 0.5f ));
 
-	ImGui::PushItemWidth( -fs * 4.f );
-	ImGui::SliderFloat( "##r_3d_scale", &g_settings.r_3d_scale, 0.25f, 2.0f, "%.2f" );
-	ImGui::PopItemWidth();
+	{
+		float rect[4];
+		AuroraLauncher_StepSlider( "r_3d_scale", &g_settings.r_3d_scale, 0.25f, 2.0f, 0.05f,
+			"%.2f", fs * 3.f * kBtnScale, rect );
+		RegisterDragRect( rect );
+	}
 
 	ImGui::Spacing();
 	/* Presets — large finger targets. */
@@ -970,6 +1055,9 @@ void DrawTabsRow()
 // ----------------------------------------------------------------------
 void DrawLauncherUI( bool &user_quit, int win_w, int win_h )
 {
+	/* the sliders register themselves again as they are drawn */
+	g_drag_rects.clear();
+
 	/* Deferred browser open — here, at the start of the frame: the tap
 	   release that opened it is already in the previous frame and can't
 	   fall through into the window. */

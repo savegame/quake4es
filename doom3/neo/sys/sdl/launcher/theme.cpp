@@ -157,3 +157,54 @@ bool AuroraLauncher_LabelToggle( const char *label, bool *value, float height )
 
 	return clicked;
 }
+
+static float SnapToStep( float value, float min, float max, float step )
+{
+	if( step > 0.0f )
+		value = min + floorf(( value - min ) / step + 0.5f ) * step;
+	return ImClamp( value, min, max );
+}
+
+bool AuroraLauncher_StepSlider( const char *id, float *value, float min, float max, float step,
+                                const char *format, float height, float sliderRect[4] )
+{
+	const ImGuiStyle &style = ImGui::GetStyle();
+	const float old = *value;
+
+	ImGui::PushID( id );
+
+	if( ImGui::Button( "-", ImVec2( height * 1.4f, height )))
+		*value = SnapToStep( *value - step, min, max, step );
+
+	ImGui::SameLine();
+
+	/* the slider fills what the buttons leave, as tall as they are */
+	const float sliderWidth = ImGui::GetContentRegionAvail().x - height * 1.4f - style.ItemSpacing.x;
+	const float padY = ImMax( 0.0f, ( height - ImGui::GetFontSize()) * 0.5f );
+	ImGui::PushStyleVar( ImGuiStyleVar_FramePadding, ImVec2( style.FramePadding.x, padY ));
+	ImGui::PushStyleVar( ImGuiStyleVar_GrabMinSize, height * 0.6f );
+	ImGui::PushItemWidth( sliderWidth );
+	if( ImGui::SliderFloat( "##slider", value, min, max, format ))
+		*value = SnapToStep( *value, min, max, step );
+	ImGui::PopItemWidth();
+	ImGui::PopStyleVar( 2 );
+
+	if( sliderRect )
+	{
+		const ImVec2 a = ImGui::GetItemRectMin();
+		const ImVec2 b = ImGui::GetItemRectMax();
+		sliderRect[0] = a.x;
+		sliderRect[1] = a.y;
+		sliderRect[2] = b.x;
+		sliderRect[3] = b.y;
+	}
+
+	ImGui::SameLine();
+
+	if( ImGui::Button( "+", ImVec2( height * 1.4f, height )))
+		*value = SnapToStep( *value + step, min, max, step );
+
+	ImGui::PopID();
+
+	return *value != old;
+}
