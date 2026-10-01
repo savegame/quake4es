@@ -105,6 +105,7 @@ extern "C" void GLimp_LoadOpenGLFuncForLauncher( void );
 #define LAUNCHER_ENV_RESDIR "GAME_RESDIR"
 #define LAUNCHER_ENV_MOD    "GAME_MOD"
 #define LAUNCHER_ENV_SCALE  "GAME_R_3D_SCALE"
+#define LAUNCHER_ENV_CVARS  "GAME_CVARS"
 
 namespace {
 
@@ -256,6 +257,7 @@ void RescanMods()
 // Persistent config: ~/.local/share/<org>/<app>/launcher.conf, key=value.
 //   path       — last picked resource root
 //   r_3d_scale — offscreen render scale factor (FBO)
+//   cvar.<name> — a graphics cvar, see kGfxSettings
 // ----------------------------------------------------------------------
 std::string HomeDir()
 {
@@ -300,6 +302,76 @@ struct LauncherSettings
 
 LauncherSettings g_settings;
 
+/* Graphics settings: the very cvars the game's own options menu sets, which
+   are fiddly to reach with a finger there. Each launch hands all of them to
+   the engine on its command line, so what is picked here wins over the
+   configs. */
+enum GfxKind
+{
+	GFX_TOGGLE,   // on/off; inverted for the r_skip* cvars
+	GFX_CHOICE,   // one of a few values, as a row of buttons
+	GFX_SLIDER,   // a float in a range
+};
+
+struct GfxChoice { const char *label; const char *value; };
+
+struct GfxSetting
+{
+	const char *cvar;
+	const char *label;
+	const char *hint;
+	GfxKind     kind;
+	const char *defaultValue;
+	bool        inverted;                  // GFX_TOGGLE: 1 means off
+	std::vector<GfxChoice> choices;        // GFX_CHOICE
+	float       minValue, maxValue;        // GFX_SLIDER
+};
+
+static const std::vector<GfxSetting> kGfxSettings = {
+	{ "r_shadows", "Тени", "Тени от источников света. Заметно нагружают GPU.",
+		GFX_TOGGLE, "1", false, {}, 0, 0 },
+	{ "r_skipBump", "Рельеф поверхностей", "Карты нормалей: объём на стенах и персонажах.",
+		GFX_TOGGLE, "0", true, {}, 0, 0 },
+	{ "r_skipSpecular", "Блики", "Отражённый свет на металле, мокрых и гладких поверхностях.",
+		GFX_TOGGLE, "0", true, {}, 0, 0 },
+	{ "r_skipNewAmbient", "Шейдерные эффекты", "Искажения воздуха у порталов, жидкости, мембраны.",
+		GFX_TOGGLE, "0", true, {}, 0, 0 },
+#if defined(_HUMANHEAD)
+	{ "r_glow", "Свечение", "Ореол вокруг светящихся частей оружия, порталов и врагов.",
+		GFX_TOGGLE, "1", false, {}, 0, 0 },
+	{ "r_glowStrength", "Яркость свечения", nullptr,
+		GFX_CHOICE, "1.0", false, { { "0.5", "0.5" }, { "1.0", "1.0" }, { "1.5", "1.5" }, { "2.0", "2.0" } }, 0, 0 },
+	{ "r_glowSteps", "Ширина свечения", "Шире ореол — больше проходов размытия.",
+		GFX_CHOICE, "2", false, { { "Узко", "1" }, { "Средне", "2" }, { "Широко", "4" } }, 0, 0 },
+#endif
+	{ "r_lowParticleDetail", "Упрощённые частицы", "Меньше частиц в дыме, огне и взрывах — быстрее.",
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	{ "image_anisotropy", "Анизотропная фильтрация", "Чёткость текстур под острым углом.",
+		GFX_CHOICE, "1", false, { { "Выкл", "1" }, { "2x", "2" }, { "4x", "4" }, { "8x", "8" } }, 0, 0 },
+	{ "r_swapInterval", "Вертикальная синхронизация", "Без разрывов кадра, частота не выше частоты экрана.",
+		GFX_TOGGLE, "1", false, {}, 0, 0 },
+	{ "com_showFPS", "Счётчик кадров", nullptr,
+		GFX_TOGGLE, "0", false, {}, 0, 0 },
+};
+
+/* Current value of every graphics cvar, by name. */
+std::vector<std::string> g_gfxValues;
+
+void ResetGfxValues()
+{
+	g_gfxValues.clear();
+	for( const GfxSetting &g : kGfxSettings )
+		g_gfxValues.push_back( g.defaultValue );
+}
+
+int FindGfxSetting( const std::string &cvar )
+{
+	for( size_t i = 0; i < kGfxSettings.size(); ++i )
+		if( cvar == kGfxSettings[i].cvar )
+			return (int)i;
+	return -1;
+}
+
 std::string TrimStr( const std::string &s )
 {
 	size_t a = 0, b = s.size();
@@ -310,6 +382,7 @@ std::string TrimStr( const std::string &s )
 
 void LoadSettings()
 {
+	ResetGfxValues();
 	FILE *f = fopen( ConfigFile().c_str(), "rb" );
 	if( !f ) return;
 	char line[4096];
@@ -323,6 +396,12 @@ void LoadSettings()
 		std::string v = TrimStr( s.substr( eq + 1 ));
 		if( k == "path" )            g_settings.path = v;
 		else if( k == "r_3d_scale" ) g_settings.r_3d_scale = (float)atof( v.c_str());
+		else if( k.compare( 0, 5, "cvar." ) == 0 )
+		{
+			const int i = FindGfxSetting( k.substr( 5 ));
+			if( i >= 0 && !v.empty())
+				g_gfxValues[i] = v;
+		}
 	}
 	fclose( f );
 	if( g_settings.r_3d_scale < 0.25f ) g_settings.r_3d_scale = 0.25f;
@@ -336,6 +415,8 @@ void SaveSettings()
 	if( !f ) return;
 	fprintf( f, "path=%s\n",         g_settings.path.c_str());
 	fprintf( f, "r_3d_scale=%.3f\n", g_settings.r_3d_scale );
+	for( size_t i = 0; i < kGfxSettings.size() && i < g_gfxValues.size(); ++i )
+		fprintf( f, "cvar.%s=%s\n", kGfxSettings[i].cvar, g_gfxValues[i].c_str());
 	fclose( f );
 }
 
@@ -659,6 +740,92 @@ void DrawTab_Game()
 }
 
 // ----------------------------------------------------------------------
+// Graphics settings, part of the "Settings" tab
+// ----------------------------------------------------------------------
+void DrawGraphicsSettings()
+{
+	const float fs = ES();
+	const float btn_h = fs * 3.f * kBtnScale;
+	const ImVec4 on_color( 0x3B / 255.f, 0x82 / 255.f, 0xF6 / 255.f, 1.f );
+
+	ImGui::Dummy( ImVec2( 0, fs ));
+	ImGui::Separator();
+	ImGui::Dummy( ImVec2( 0, fs * 0.5f ));
+	ImGui::TextUnformatted( "Графика" );
+	ImGui::TextDisabled( "Применяются при каждом запуске и заменяют настройки из меню игры." );
+
+	for( size_t i = 0; i < kGfxSettings.size(); ++i )
+	{
+		const GfxSetting &g = kGfxSettings[i];
+		std::string &value = g_gfxValues[i];
+
+		ImGui::PushID( (int)i );
+		ImGui::Dummy( ImVec2( 0, fs * 0.5f ));
+
+		switch( g.kind )
+		{
+		case GFX_TOGGLE:
+		{
+			/* the whole row is one big button: label on the left, state on
+			   the right, easy to hit with a finger */
+			const bool on = ( atoi( value.c_str()) != 0 ) != g.inverted;
+			char label[256];
+			snprintf( label, sizeof( label ), "%s: %s", g.label, on ? "вкл" : "выкл" );
+			if( on )
+				ImGui::PushStyleColor( ImGuiCol_Button, on_color );
+			if( ImGui::Button( label, ImVec2( -1, btn_h )))
+				value = (( !on ) != g.inverted ) ? "1" : "0";
+			if( on )
+				ImGui::PopStyleColor();
+			break;
+		}
+		case GFX_CHOICE:
+		{
+			ImGui::TextUnformatted( g.label );
+			const size_t n = g.choices.size();
+			const float w = ( ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * ( n - 1 )) / n;
+			for( size_t c = 0; c < n; ++c )
+			{
+				const bool picked = value == g.choices[c].value;
+				if( picked )
+					ImGui::PushStyleColor( ImGuiCol_Button, on_color );
+				if( ImGui::Button( g.choices[c].label, ImVec2( w, btn_h )))
+					value = g.choices[c].value;
+				if( picked )
+					ImGui::PopStyleColor();
+				if( c + 1 < n )
+					ImGui::SameLine();
+			}
+			break;
+		}
+		case GFX_SLIDER:
+		{
+			ImGui::TextUnformatted( g.label );
+			float f = (float)atof( value.c_str());
+			ImGui::PushItemWidth( -1 );
+			if( ImGui::SliderFloat( "##slider", &f, g.minValue, g.maxValue, "%.2f" ))
+			{
+				char buf[32];
+				snprintf( buf, sizeof( buf ), "%.2f", f );
+				value = buf;
+			}
+			ImGui::PopItemWidth();
+			break;
+		}
+		}
+
+		if( g.hint )
+			ImGui::TextDisabled( "%s", g.hint );
+
+		ImGui::PopID();
+	}
+
+	ImGui::Dummy( ImVec2( 0, fs ));
+	if( ImGui::Button( "Сбросить графику", ImVec2( -1, btn_h )))
+		ResetGfxValues();
+}
+
+// ----------------------------------------------------------------------
 // Tab "Settings"
 // ----------------------------------------------------------------------
 void DrawTab_Settings()
@@ -695,6 +862,8 @@ void DrawTab_Settings()
 	ImGui::Dummy( ImVec2( 0, fs ));
 	ImGui::TextColored( ImVec4( 0.6f, 0.8f, 1.f, 1.f ),
 		"Текущее значение: %.2f", g_settings.r_3d_scale );
+
+	DrawGraphicsSettings();
 }
 
 // ----------------------------------------------------------------------
@@ -1111,6 +1280,17 @@ launcher_result_t Launcher_Run( void )
 		char scale_buf[32];
 		snprintf( scale_buf, sizeof( scale_buf ), "%.3f", g_settings.r_3d_scale );
 		setenv( LAUNCHER_ENV_SCALE,  scale_buf, 1 );
+
+		/* "name value" lines, turned into +set by the engine */
+		std::string cvars;
+		for( size_t i = 0; i < kGfxSettings.size() && i < g_gfxValues.size(); ++i )
+		{
+			cvars += kGfxSettings[i].cvar;
+			cvars += ' ';
+			cvars += g_gfxValues[i];
+			cvars += '\n';
+		}
+		setenv( LAUNCHER_ENV_CVARS, cvars.c_str(), 1 );
 
 		g_settings.path = g_picker.selected;
 	}

@@ -1120,6 +1120,37 @@ int main(int argc, char **argv) {
 		launcherArgs.Append( scale );
 	}
 
+	/* The graphics settings, "name value" a line. The words have to outlive
+	   common->Init(), which keeps pointers to the arguments. */
+	static idStrList launcherCvars;
+	const char *cvars = getenv( "GAME_CVARS" );
+
+	if ( cvars ) {
+		idStrList lines;
+		idStr all( cvars );
+		int start = 0;
+
+		for ( int i = 0; i <= all.Length(); i++ ) {
+			if ( i == all.Length() || all[i] == '\n' ) {
+				idStr line = all.Mid( start, i - start );
+				const int space = line.Find( ' ' );
+
+				if ( space > 0 ) {
+					launcherCvars.Append( line.Left( space ) );
+					launcherCvars.Append( line.Right( line.Length() - space - 1 ) );
+				}
+
+				start = i + 1;
+			}
+		}
+
+		for ( int i = 0; i + 1 < launcherCvars.Num(); i += 2 ) {
+			launcherArgs.Append( "+set" );
+			launcherArgs.Append( launcherCvars[i].c_str() );
+			launcherArgs.Append( launcherCvars[i + 1].c_str() );
+		}
+	}
+
 	/* The engine goes on rendering into the launcher's context, so the
 	   renderer has to be set up for the GL that context really is rather than
 	   for the platform default (desktop OpenGL off Android). Appended after
