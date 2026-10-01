@@ -22,4 +22,15 @@ GNU General Public License for more details.
 // size (fontSizePx / 13). Call after ImGui::CreateContext.
 void AuroraLauncher_ApplyTheme( float fontSizePx );
 
+// On/off switch: a capsule with a round knob, the knob on the right and the
+// capsule in the accent colour while on, on the left and grey while off. The
+// knob slides between the two. height is the height of the capsule, the width
+// is twice that. Returns true on the frame the value was flipped.
+bool AuroraLauncher_Toggle( const char *id, bool *value, float height );
+
+// A row of the settings: the label on the left, the switch on the right. The
+// whole row flips it, which is an easier target for a finger than the switch.
+// Returns true on the frame the value was flipped.
+bool AuroraLauncher_LabelToggle( const char *label, bool *value, float height );
+
 #endif // LAUNCHER_THEME_H

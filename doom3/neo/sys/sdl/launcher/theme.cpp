@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "theme.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 #define THEME_HEX(h) ImVec4(((h >> 16) & 0xFF) / 255.f, ((h >> 8) & 0xFF) / 255.f, (h & 0xFF) / 255.f, 1.0f)
 
@@ -68,4 +69,91 @@ void AuroraLauncher_ApplyTheme( float fontSizePx )
 	c[ImGuiCol_CheckMark]        = THEME_HEX( 0xFFFFFF );
 	c[ImGuiCol_SliderGrab]       = THEME_HEX( 0x3B82F6 ); /* accent */
 	c[ImGuiCol_SliderGrabActive] = THEME_HEX( 0x5AA0FF ); /* accent line */
+}
+
+// colours of the switch, from the palette above
+#define THEME_ACCENT        0x3B82F6
+#define THEME_SWITCH_OFF    0x2A2A2F    /* FrameBg */
+#define THEME_SWITCH_BORDER 0x0B0B0D    /* Border */
+#define THEME_KNOB_ON       0xFFFFFF
+#define THEME_KNOB_OFF      0x8A8A93
+
+// seconds the knob takes to slide across
+#define THEME_SWITCH_SLIDE  0.12f
+
+static ImU32 ThemeLerpColor( unsigned a, unsigned b, float t )
+{
+	return ImGui::GetColorU32( ImLerp( THEME_HEX( a ), THEME_HEX( b ), t ));
+}
+
+/* Draws the switch with its knob t of the way to the right, 0..1. */
+static void DrawSwitch( ImDrawList *list, const ImVec2 &pos, float height, float t )
+{
+	const float width = height * 2.0f;
+	const float radius = height * 0.5f;
+	const float knob = radius - height * 0.12f;
+	const ImVec2 end( pos.x + width, pos.y + height );
+
+	list->AddRectFilled( pos, end, ThemeLerpColor( THEME_SWITCH_OFF, THEME_ACCENT, t ), radius );
+	list->AddRect( pos, end, ImGui::GetColorU32( THEME_HEX( THEME_SWITCH_BORDER )), radius, 0, 1.0f );
+
+	const ImVec2 centre( pos.x + radius + ( width - height ) * t, pos.y + radius );
+	list->AddCircleFilled( centre, knob, ThemeLerpColor( THEME_KNOB_OFF, THEME_KNOB_ON, t ));
+}
+
+/* Where the knob is, eased towards the value; kept per widget id. */
+static float SlideKnob( ImGuiID id, bool value )
+{
+	ImGuiStorage *storage = ImGui::GetStateStorage();
+	const float target = value ? 1.0f : 0.0f;
+	float t = storage->GetFloat( id, target );
+	const float step = ImGui::GetIO().DeltaTime / THEME_SWITCH_SLIDE;
+
+	if( t < target ) t = ImMin( target, t + step );
+	else if( t > target ) t = ImMax( target, t - step );
+
+	storage->SetFloat( id, t );
+	return t;
+}
+
+bool AuroraLauncher_Toggle( const char *id, bool *value, float height )
+{
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	const bool clicked = ImGui::InvisibleButton( id, ImVec2( height * 2.0f, height ));
+
+	if( clicked )
+		*value = !*value;
+
+	DrawSwitch( ImGui::GetWindowDrawList(), pos, height, SlideKnob( ImGui::GetItemID(), *value ));
+	return clicked;
+}
+
+bool AuroraLauncher_LabelToggle( const char *label, bool *value, float height )
+{
+	const ImGuiStyle &style = ImGui::GetStyle();
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	const float width = ImGui::GetContentRegionAvail().x;
+	const float rowHeight = height + style.FramePadding.y * 2.0f;
+	const float switchWidth = height * 2.0f;
+
+	ImGui::PushID( label );
+	const bool clicked = ImGui::InvisibleButton( "##row", ImVec2( width, rowHeight ));
+	const ImGuiID id = ImGui::GetItemID();
+	ImGui::PopID();
+
+	if( clicked )
+		*value = !*value;
+
+	ImDrawList *list = ImGui::GetWindowDrawList();
+
+	/* the label, centred on the row and kept clear of the switch */
+	const ImVec2 textSize = ImGui::CalcTextSize( label );
+	const ImVec2 textPos( pos.x, pos.y + ( rowHeight - textSize.y ) * 0.5f );
+	const ImVec4 clip( pos.x, pos.y, pos.x + width - switchWidth - style.ItemSpacing.x, pos.y + rowHeight );
+	list->AddText( NULL, 0.0f, textPos, ImGui::GetColorU32( ImGuiCol_Text ), label, NULL, 0.0f, &clip );
+
+	const ImVec2 switchPos( pos.x + width - switchWidth, pos.y + ( rowHeight - height ) * 0.5f );
+	DrawSwitch( list, switchPos, height, SlideKnob( id, *value ));
+
+	return clicked;
 }

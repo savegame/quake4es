@@ -766,17 +766,9 @@ void DrawGraphicsSettings()
 		{
 		case GFX_TOGGLE:
 		{
-			/* the whole row is one big button: label on the left, state on
-			   the right, easy to hit with a finger */
-			const bool on = ( atoi( value.c_str()) != 0 ) != g.inverted;
-			char label[256];
-			snprintf( label, sizeof( label ), "%s: %s", g.label, on ? "вкл" : "выкл" );
-			if( on )
-				ImGui::PushStyleColor( ImGuiCol_Button, on_color );
-			if( ImGui::Button( label, ImVec2( -1, btn_h )))
-				value = (( !on ) != g.inverted ) ? "1" : "0";
-			if( on )
-				ImGui::PopStyleColor();
+			bool on = ( atoi( value.c_str()) != 0 ) != g.inverted;
+			if( AuroraLauncher_LabelToggle( g.label, &on, fs * 1.6f ))
+				value = ( on != g.inverted ) ? "1" : "0";
 			break;
 		}
 		case GFX_CHOICE:
