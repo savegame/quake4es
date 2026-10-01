@@ -51,6 +51,23 @@ VERTEX CACHE GENERATORS
 static ID_INLINE float R_CalcViewAndEntityDistance(const viewDef_t *viewDef, const renderEntity_t *entity)
 {
 	//idVec3 origin = idVec3(space->modelMatrix[12], space->modelMatrix[13], space->modelMatrix[14]);
+	// Characters burn away as the camera comes close, so that it never ends
+	// up inside them (the spirit leaving its body, the camera running into an
+	// NPC): alphaTest 1.8 - distance / 28 takes them away within some 50 units.
+	// That only works if the distance is to the body itself, to its bounds:
+	// the origin is at the feet, so a camera at eye height never gets nearer
+	// to it than 60 units or so and nothing ever burned.
+	if (!entity->bounds.IsCleared()) {
+		const idVec3 local = (viewDef->renderView.vieworg - entity->origin) * entity->axis.Transpose();
+		idVec3 outside;
+
+		for (int i = 0; i < 3; i++) {
+			outside[i] = Max(0.0f, Max(entity->bounds[0][i] - local[i], local[i] - entity->bounds[1][i]));
+		}
+
+		return outside.LengthFast();
+	}
+
 	return (viewDef->renderView.vieworg - entity->origin).LengthFast();
 }
 
