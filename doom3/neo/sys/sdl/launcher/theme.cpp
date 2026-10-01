@@ -21,6 +21,8 @@ GNU General Public License for more details.
 
 #include "theme.h"
 
+#include <stdio.h>
+
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -170,38 +172,65 @@ bool AuroraLauncher_StepSlider( const char *id, float *value, float min, float m
 {
 	const ImGuiStyle &style = ImGui::GetStyle();
 	const float old = *value;
+	const float buttonWidth = height * 1.4f;
 
 	ImGui::PushID( id );
 
-	if( ImGui::Button( "-", ImVec2( height * 1.4f, height )))
+	if( ImGui::Button( "-", ImVec2( buttonWidth, height )))
 		*value = SnapToStep( *value - step, min, max, step );
 
 	ImGui::SameLine();
 
-	/* the slider fills what the buttons leave, as tall as they are */
-	const float sliderWidth = ImGui::GetContentRegionAvail().x - height * 1.4f - style.ItemSpacing.x;
-	const float padY = ImMax( 0.0f, ( height - ImGui::GetFontSize()) * 0.5f );
-	ImGui::PushStyleVar( ImGuiStyleVar_FramePadding, ImVec2( style.FramePadding.x, padY ));
-	ImGui::PushStyleVar( ImGuiStyleVar_GrabMinSize, height * 0.6f );
-	ImGui::PushItemWidth( sliderWidth );
-	if( ImGui::SliderFloat( "##slider", value, min, max, format ))
-		*value = SnapToStep( *value, min, max, step );
-	ImGui::PopItemWidth();
-	ImGui::PopStyleVar( 2 );
+	/* the track fills what the buttons leave */
+	const float width = ImMax( height * 2.0f, ImGui::GetContentRegionAvail().x - buttonWidth - style.ItemSpacing.x );
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	ImGui::InvisibleButton( "##slider", ImVec2( width, height ));
+
+	const float radius = height * 0.5f;
+	const float knob = radius - height * 0.12f;
+	const float left = pos.x + radius;
+	const float travel = width - height;
+
+	/* the knob follows the finger while it holds the track */
+	if( ImGui::IsItemActive() && travel > 0.0f && max > min )
+	{
+		const float t = ImSaturate(( ImGui::GetIO().MousePos.x - left ) / travel );
+		*value = SnapToStep( min + t * ( max - min ), min, max, step );
+	}
 
 	if( sliderRect )
 	{
-		const ImVec2 a = ImGui::GetItemRectMin();
-		const ImVec2 b = ImGui::GetItemRectMax();
-		sliderRect[0] = a.x;
-		sliderRect[1] = a.y;
-		sliderRect[2] = b.x;
-		sliderRect[3] = b.y;
+		sliderRect[0] = pos.x;
+		sliderRect[1] = pos.y;
+		sliderRect[2] = pos.x + width;
+		sliderRect[3] = pos.y + height;
 	}
+
+	const float t = max > min ? ImSaturate(( *value - min ) / ( max - min )) : 0.0f;
+	const ImVec2 end( pos.x + width, pos.y + height );
+	const ImVec2 centre( left + travel * t, pos.y + radius );
+	ImDrawList *list = ImGui::GetWindowDrawList();
+
+	/* the track, lit in the accent colour up to the knob */
+	list->AddRectFilled( pos, end, ImGui::GetColorU32( THEME_HEX( THEME_SWITCH_OFF )), radius );
+	list->AddRectFilled( pos, ImVec2( centre.x + radius, end.y ), ImGui::GetColorU32( THEME_HEX( THEME_ACCENT )), radius );
+	list->AddRect( pos, end, ImGui::GetColorU32( THEME_HEX( THEME_SWITCH_BORDER )), radius, 0, 1.0f );
+
+	/* the value in the middle of the track, under the knob */
+	if( format )
+	{
+		char text[64];
+		snprintf( text, sizeof( text ), format, *value );
+		const ImVec2 size = ImGui::CalcTextSize( text );
+		list->AddText( ImVec2( pos.x + ( width - size.x ) * 0.5f, pos.y + ( height - size.y ) * 0.5f ),
+			ImGui::GetColorU32( ImGuiCol_Text ), text );
+	}
+
+	list->AddCircleFilled( centre, knob, ImGui::GetColorU32( THEME_HEX( THEME_KNOB_ON )));
 
 	ImGui::SameLine();
 
-	if( ImGui::Button( "+", ImVec2( height * 1.4f, height )))
+	if( ImGui::Button( "+", ImVec2( buttonWidth, height )))
 		*value = SnapToStep( *value + step, min, max, step );
 
 	ImGui::PopID();
