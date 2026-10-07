@@ -361,6 +361,9 @@ struct GfxSetting
 	bool        inverted;                  // GFX_TOGGLE: 1 means off
 	std::vector<GfxChoice> choices;        // GFX_CHOICE
 	float       minValue, maxValue;        // GFX_SLIDER
+	const char *requires;                  // usable only while this toggle is on (and usable itself)
+	const char *requiresOff;               // usable only while this toggle is off
+	const char *excludes;                  // GFX_TOGGLE: turning this on turns that one off
 };
 
 static const std::vector<GfxSetting> kGfxSettings = {
@@ -374,8 +377,6 @@ static const std::vector<GfxSetting> kGfxSettings = {
 	{ "r_auroraFsrSharpness", "Резкость FSR", nullptr,
 		GFX_CHOICE, "0.25", false, { { "Мягко", "1.0" }, { "Средне", "0.5" }, { "Резко", "0.25" }, { "Макс", "0" } }, 0, 0 },
 #endif
-	{ "r_shadows", "Тени", "Тени от источников света. Заметно нагружают GPU.",
-		GFX_TOGGLE, "1", false, {}, 0, 0 },
 	{ "r_skipBump", "Рельеф поверхностей", "Карты нормалей: объём на стенах и персонажах.",
 		GFX_TOGGLE, "0", true, {}, 0, 0 },
 	{ "r_skipSpecular", "Блики", "Отражённый свет на металле, мокрых и гладких поверхностях.",
@@ -390,15 +391,21 @@ static const std::vector<GfxSetting> kGfxSettings = {
 	{ "r_glowSteps", "Ширина свечения", "Шире ореол — больше проходов размытия.",
 		GFX_CHOICE, "2", false, { { "Узко", "1" }, { "Средне", "2" }, { "Широко", "4" } }, 0, 0 },
 #endif
-	/* shadows and lighting of idTech4A++ */
-	{ "r_useShadowMapping", "Мягкие тени", "Shadow mapping вместо стенсильных теней: размытые края. Нагружает GPU.",
-		GFX_TOGGLE, "0", false, {}, 0, 0 },
+	/* the shadows, and under them the ways to draw them; the two kinds of
+	   soft shadows exclude each other */
+	{ "r_shadows", "Тени", "Тени от источников света. Заметно нагружают GPU.",
+		GFX_TOGGLE, "1", false, {}, 0, 0 },
+	{ "r_useShadowMapping", "Мягкие тени", "Shadow mapping вместо стандартных теней: размытые края. "
+		"Нагружает GPU. Включается вместо мягких стандартных теней.",
+		GFX_TOGGLE, "0", false, {}, 0, 0, "r_shadows", nullptr, "harm_r_stencilShadowSoft" },
 	{ "r_shadowMapSamples", "Качество мягких теней", nullptr,
-		GFX_CHOICE, "16", false, { { "Низкое", "1" }, { "Среднее", "4" }, { "Высокое", "16" } }, 0, 0 },
-	{ "harm_r_stencilShadowSoft", "Мягкие края обычных теней", "Размытие краёв стенсильных теней. Нужен OpenGL ES 3.1.",
-		GFX_TOGGLE, "0", false, {}, 0, 0 },
-	{ "harm_r_stencilShadowTranslucent", "Полупрозрачные тени", "Тени от стекла, решёток и частиц.",
-		GFX_TOGGLE, "0", false, {}, 0, 0 },
+		GFX_CHOICE, "16", false, { { "Низкое", "1" }, { "Среднее", "4" }, { "Высокое", "16" } }, 0, 0,
+		"r_useShadowMapping" },
+	{ "harm_r_stencilShadowSoft", "Мягкие стандартные тени", "Размытие краёв стандартных теней. Нужен OpenGL ES 3.1. "
+		"Включается вместо мягких теней.",
+		GFX_TOGGLE, "0", false, {}, 0, 0, "r_shadows", nullptr, "r_useShadowMapping" },
+	{ "harm_r_stencilShadowTranslucent", "Полупрозрачные тени", "Тени от стекла, решёток и частиц. Только для стандартных теней.",
+		GFX_TOGGLE, "0", false, {}, 0, 0, "r_shadows", "r_useShadowMapping" },
 	{ "harm_r_lightingModel", "Модель освещения", "Phong — как в оригинале.",
 		GFX_CHOICE, "1", false, { { "Phong", "1" }, { "Blinn-Phong", "2" }, { "PBR", "3" } }, 0, 0 },
 	{ "harm_r_globalIllumination", "Подсветка теней", "Тени не уходят в полную черноту.",
@@ -441,6 +448,48 @@ int FindGfxSetting( const std::string &cvar )
 	return -1;
 }
 
+/* A toggle reads as on, whichever way its cvar counts. */
+bool GfxIsOn( int i )
+{
+	if( i < 0 || i >= (int)g_gfxValues.size())
+		return false;
+	return ( atoi( g_gfxValues[i].c_str()) != 0 ) != kGfxSettings[i].inverted;
+}
+
+void GfxSetOn( int i, bool on )
+{
+	if( i >= 0 && i < (int)g_gfxValues.size())
+		g_gfxValues[i] = ( on != kGfxSettings[i].inverted ) ? "1" : "0";
+}
+
+/* Whether a setting can be changed: what it requires is on and usable in
+   turn, what it requires off is off. */
+bool GfxIsUsable( int i )
+{
+	const GfxSetting &g = kGfxSettings[i];
+	if( g.requires )
+	{
+		const int r = FindGfxSetting( g.requires );
+		if( r >= 0 && ( !GfxIsOn( r ) || !GfxIsUsable( r )))
+			return false;
+	}
+	if( g.requiresOff && GfxIsOn( FindGfxSetting( g.requiresOff )))
+		return false;
+	return true;
+}
+
+/* How deep a setting sits under the toggles it requires. */
+int GfxDepth( int i )
+{
+	int depth = 0;
+	while( i >= 0 && kGfxSettings[i].requires )
+	{
+		i = FindGfxSetting( kGfxSettings[i].requires );
+		++depth;
+	}
+	return depth;
+}
+
 std::string TrimStr( const std::string &s )
 {
 	size_t a = 0, b = s.size();
@@ -473,6 +522,13 @@ void LoadSettings()
 		}
 	}
 	fclose( f );
+
+	/* a config from before the toggles excluded each other may have both
+	   on: the one listed first wins */
+	for( size_t i = 0; i < kGfxSettings.size(); ++i )
+		if( kGfxSettings[i].excludes && GfxIsOn( (int)i ))
+			GfxSetOn( FindGfxSetting( kGfxSettings[i].excludes ), false );
+
 	if( g_settings.r_3d_scale < 0.25f ) g_settings.r_3d_scale = 0.25f;
 	if( g_settings.r_3d_scale > 2.0f )  g_settings.r_3d_scale = 2.0f;
 }
@@ -857,13 +913,25 @@ void DrawGraphicsSettings()
 		ImGui::PushID( (int)i );
 		ImGui::Dummy( ImVec2( 0, fs * 0.5f ));
 
+		/* settings that hang on a toggle sit under it, greyed out while
+		   they can't be used */
+		const float indent = fs * 1.5f * GfxDepth( (int)i );
+		if( indent > 0.0f )
+			ImGui::Indent( indent );
+		const bool usable = GfxIsUsable( (int)i );
+		ImGui::BeginDisabled( !usable );
+
 		switch( g.kind )
 		{
 		case GFX_TOGGLE:
 		{
-			bool on = ( atoi( value.c_str()) != 0 ) != g.inverted;
+			bool on = GfxIsOn( (int)i );
 			if( AuroraLauncher_LabelToggle( g.label, &on, ControlHeight()))
-				value = ( on != g.inverted ) ? "1" : "0";
+			{
+				GfxSetOn( (int)i, on );
+				if( on && g.excludes )
+					GfxSetOn( FindGfxSetting( g.excludes ), false );
+			}
 			break;
 		}
 		case GFX_CHOICE:
@@ -903,6 +971,10 @@ void DrawGraphicsSettings()
 
 		if( g.hint )
 			ImGui::TextDisabled( "%s", g.hint );
+
+		ImGui::EndDisabled();
+		if( indent > 0.0f )
+			ImGui::Unindent( indent );
 
 		ImGui::PopID();
 	}
