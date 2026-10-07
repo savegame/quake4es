@@ -373,9 +373,9 @@ static const std::vector<GfxSetting> kGfxSettings = {
 		"Например, рендер 0.25 и FSR до 0.5 — быстро и чётко на плотном экране.",
 		GFX_TOGGLE, "0", false, {}, 0, 0 },
 	{ "r_auroraFsrScale", "Разрешение после FSR", nullptr,
-		GFX_CHOICE, "0.5", false, { { "0.5", "0.5" }, { "0.75", "0.75" }, { "1.0", "1.0" } }, 0, 0 },
+		GFX_CHOICE, "0.5", false, { { "0.5", "0.5" }, { "0.75", "0.75" }, { "1.0", "1.0" } }, 0, 0, "r_auroraFsr" },
 	{ "r_auroraFsrSharpness", "Резкость FSR", nullptr,
-		GFX_CHOICE, "0.25", false, { { "Мягко", "1.0" }, { "Средне", "0.5" }, { "Резко", "0.25" }, { "Макс", "0" } }, 0, 0 },
+		GFX_CHOICE, "0.25", false, { { "Мягко", "1.0" }, { "Средне", "0.5" }, { "Резко", "0.25" }, { "Макс", "0" } }, 0, 0, "r_auroraFsr" },
 #endif
 	{ "r_skipBump", "Рельеф поверхностей", "Карты нормалей: объём на стенах и персонажах.",
 		GFX_TOGGLE, "0", true, {}, 0, 0 },
@@ -387,9 +387,9 @@ static const std::vector<GfxSetting> kGfxSettings = {
 	{ "r_glow", "Свечение", "Ореол вокруг светящихся частей оружия, порталов и врагов.",
 		GFX_TOGGLE, "1", false, {}, 0, 0 },
 	{ "r_glowStrength", "Яркость свечения", nullptr,
-		GFX_CHOICE, "1.0", false, { { "0.5", "0.5" }, { "1.0", "1.0" }, { "1.5", "1.5" }, { "2.0", "2.0" } }, 0, 0 },
+		GFX_CHOICE, "1.0", false, { { "0.5", "0.5" }, { "1.0", "1.0" }, { "1.5", "1.5" }, { "2.0", "2.0" } }, 0, 0, "r_glow" },
 	{ "r_glowSteps", "Ширина свечения", "Шире ореол — больше проходов размытия.",
-		GFX_CHOICE, "2", false, { { "Узко", "1" }, { "Средне", "2" }, { "Широко", "4" } }, 0, 0 },
+		GFX_CHOICE, "2", false, { { "Узко", "1" }, { "Средне", "2" }, { "Широко", "4" } }, 0, 0, "r_glow" },
 #endif
 	/* the shadows, and under them the ways to draw them; the two kinds of
 	   soft shadows exclude each other */
@@ -411,7 +411,7 @@ static const std::vector<GfxSetting> kGfxSettings = {
 	{ "harm_r_globalIllumination", "Подсветка теней", "Тени не уходят в полную черноту.",
 		GFX_TOGGLE, "0", false, {}, 0, 0 },
 	{ "harm_r_globalIlluminationBrightness", "Яркость подсветки", nullptr,
-		GFX_CHOICE, "0.3", false, { { "0.2", "0.2" }, { "0.3", "0.3" }, { "0.5", "0.5" } }, 0, 0 },
+		GFX_CHOICE, "0.3", false, { { "0.2", "0.2" }, { "0.3", "0.3" }, { "0.5", "0.5" } }, 0, 0, "harm_r_globalIllumination" },
 	{ "r_maxFps", "Лимит FPS", "Меньше нагрев и расход батареи.",
 		GFX_CHOICE, "0", false, { { "Нет", "0" }, { "30", "30" }, { "45", "45" }, { "60", "60" } }, 0, 0 },
 #if defined(_HUMANHEAD)
