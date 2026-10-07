@@ -1012,7 +1012,7 @@ void RB_DrawView(const void *data)
 #ifdef _AURORA_FBO
 	// the 2D goes to the FSR output, at its resolution, over the upscaled scene
 	if (!backEnd.viewDef->viewEntitys) {
-		auroraFramebuffer.BeginOutput();
+		auroraFramebuffer.Begin2D();
 	}
 #endif
 

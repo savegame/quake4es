@@ -153,7 +153,8 @@ idAuroraFramebuffer::idAuroraFramebuffer()
     vertexBuffer(0),
     fsrEnabled(false),
     fsrScale(0.5f),
-    outputActive(false)
+    outputActive(false),
+    pendingCopyRender(NULL)
 {
     memset(rotationMatrices, 0, sizeof(rotationMatrices));
 }
@@ -982,8 +983,10 @@ Also puts things back when the last frame never reached Draw(), which is what
 a screenshot does.
 ====================
 */
-void idAuroraFramebuffer::BeginFrame(void)
+void idAuroraFramebuffer::BeginFrame(const void *lastCopyRender)
 {
+    pendingCopyRender = lastCopyRender;
+
     R_AuroraRemoveScaledRects();
 
     if (outputActive) {
@@ -993,6 +996,30 @@ void idAuroraFramebuffer::BeginFrame(void)
             qglBindFramebuffer(GL_FRAMEBUFFER, fb->GetFramebuffer());
             backEnd.glState.currentFramebuffer = NULL;
         }
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::CopyRenderDone
+====================
+*/
+void idAuroraFramebuffer::CopyRenderDone(const void *command)
+{
+    if (command == pendingCopyRender) {
+        pendingCopyRender = NULL;
+    }
+}
+
+/*
+====================
+idAuroraFramebuffer::Begin2D
+====================
+*/
+void idAuroraFramebuffer::Begin2D(void)
+{
+    if (!pendingCopyRender) {
+        BeginOutput();
     }
 }
 
@@ -1150,6 +1177,31 @@ void idAuroraFramebuffer::Draw(void)
     qglVertexAttribPointer(texCoordAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const void *)(2 * sizeof(float)));
 
     qglDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    { // TMPDUMP
+        static int tmpFrame = 0;
+        const char *at = getenv("AURORA_DUMP_AT");
+        const char *path = getenv("AURORA_DUMP_PATH");
+        tmpFrame++;
+        if (at && path) {
+            idStr key = va(",%d,", tmpFrame);
+            idStr all = va(",%s,", at);
+            if (all.Find(key.c_str()) >= 0) {
+                byte *px = (byte *)Mem_Alloc(windowWidth * windowHeight * 4);
+                qglReadPixels(0, 0, windowWidth, windowHeight, GL_RGBA, GL_UNSIGNED_BYTE, px);
+                FILE *f = fopen(va("%s_%d.ppm", path, tmpFrame), "wb");
+                if (f) {
+                    fprintf(f, "P6\n%d %d\n255\n", windowWidth, windowHeight);
+                    for (int yy = windowHeight - 1; yy >= 0; yy--)
+                        for (int xx = 0; xx < windowWidth; xx++)
+                            fwrite(px + (yy * windowWidth + xx) * 4, 1, 3, f);
+                    fclose(f);
+                }
+                Mem_Free(px);
+                fprintf(stderr, "TMPDUMP frame %d\n", tmpFrame);
+            }
+        }
+    }
 
     qglDisableVertexAttribArray(vertexAttrib);
     qglDisableVertexAttribArray(texCoordAttrib);

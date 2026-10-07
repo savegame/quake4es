@@ -82,11 +82,24 @@ class idAuroraFramebuffer
         }
 
         // Start of the backend's commands: the frame begins with the scene.
-        void                BeginFrame(void);
+        // lastCopyRender is the last RC_COPY_RENDER command of the frame, if
+        // any, see Begin2D().
+        void                BeginFrame(const void *lastCopyRender = NULL);
+
+        // A copy render command has been executed.
+        void                CopyRenderDone(const void *command);
+
+        // A 2D view is about to be drawn: it goes to the output, unless a copy
+        // of the frame into an image is still to come. Then the 2D is part of
+        // a picture composed at the scene resolution and copied away, like the
+        // double vision of Prey, which crops the render, draws the view and
+        // the damage blobs into the corner, copies it and stretches the copy
+        // over the screen.
+        void                Begin2D(void);
 
         // The scene is done: upscale it and send whatever is drawn after it
-        // to the output buffer. Called before the first 2D view of a frame,
-        // or from Draw() when there was none; does nothing without FSR.
+        // to the output buffer. Called from Begin2D(), or from Draw() when a
+        // frame had no 2D; does nothing without FSR.
         void                BeginOutput(void);
 
         // true from BeginOutput() to the end of the frame
@@ -187,6 +200,7 @@ class idAuroraFramebuffer
         bool                fsrEnabled;
         float               fsrScale;
         bool                outputActive;
+        const void *        pendingCopyRender;   // the last copy render of the frame, until it is done
 
         idAuroraFramebuffer(const idAuroraFramebuffer &);
         idAuroraFramebuffer & operator=(const idAuroraFramebuffer &);

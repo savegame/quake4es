@@ -701,8 +701,19 @@ void RB_ExecuteBackEndCommands(const emptyCommand_t *cmds)
 	backEndStartTime = Sys_Milliseconds();
 
 #ifdef _AURORA_FBO
-	// every frame starts with the scene
-	auroraFramebuffer.BeginFrame();
+	// every frame starts with the scene; the 2D stays with it until the last
+	// copy of the frame into an image, see idAuroraFramebuffer::Begin2D()
+	{
+		const void *lastCopyRender = NULL;
+
+		for (const emptyCommand_t *cmd = cmds; cmd; cmd = (const emptyCommand_t *)cmd->next) {
+			if (cmd->commandId == RC_COPY_RENDER) {
+				lastCopyRender = cmd;
+			}
+		}
+
+		auroraFramebuffer.BeginFrame(lastCopyRender);
+	}
 #endif
 
 	// needed for editor rendering
@@ -738,6 +749,9 @@ void RB_ExecuteBackEndCommands(const emptyCommand_t *cmds)
 				break;
 			case RC_COPY_RENDER:
 				RB_CopyRender(cmds);
+#ifdef _AURORA_FBO
+				auroraFramebuffer.CopyRenderDone(cmds);
+#endif
 				c_copyRenders++;
 				break;
 #ifdef _SPLASHDAMAGE //karin: copy frontend parms to backend
